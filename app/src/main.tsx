@@ -24,6 +24,7 @@ export const router = createRouter({
   context: {
     queryClient,
     auth: {
+      session: null,
       user: null,
       loading: false,
     },

@@ -1,24 +1,31 @@
-import { createContext, PropsWithChildren, useContext, useState } from "react";
+import { createContext, type PropsWithChildren, useContext, useMemo } from "react";
+import { type VeilSession } from "../lib/auth/client";
+import { useSession } from "../lib/auth/session";
 
 export type AuthContextType = {
-  user: object | null;
+  session: VeilSession | null;
+  user: VeilSession["user"] | null;
   loading: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({
+  session: null,
   user: null,
   loading: false,
 });
 
 export const AuthProvider = ({ children }: PropsWithChildren) => {
-  const [user] = useState<object | null>(null);
-  const [loading] = useState(false);
-
-  return (
-    <AuthContext.Provider value={{ user, loading }}>
-      {children}
-    </AuthContext.Provider>
+  const { session, loading } = useSession();
+  const value = useMemo<AuthContextType>(
+    () => ({
+      session,
+      user: session?.user ?? null,
+      loading,
+    }),
+    [loading, session],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

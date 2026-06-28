@@ -11,5 +11,7 @@ dev-dist/
 *.log
 .DS_Store
 .playwright-mcp/
+.tanstack/
+app/.tanstack/
 veil-desktop.png
 app/veil-*-mobile.png

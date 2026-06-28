@@ -9,18 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AboutRouteImport } from './routes/about'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedProtectedRouteRouteImport } from './routes/_authenticated/protected-route'
+import { Route as OnboardingUsernameRouteImport } from './routes/onboarding/username'
+import { Route as OnboardingPinRouteImport } from './routes/onboarding/pin'
+import { Route as AppWithdrawRouteImport } from './routes/_app/withdraw'
+import { Route as AppSendRouteImport } from './routes/_app/send'
+import { Route as AppProfileRouteImport } from './routes/_app/profile'
+import { Route as AppHomeRouteImport } from './routes/_app/home'
+import { Route as AppHistoryRouteImport } from './routes/_app/history'
+import { Route as AppDepositRouteImport } from './routes/_app/deposit'
 
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -28,63 +35,145 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedProtectedRouteRoute =
-  AuthenticatedProtectedRouteRouteImport.update({
-    id: '/protected-route',
-    path: '/protected-route',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
+const OnboardingUsernameRoute = OnboardingUsernameRouteImport.update({
+  id: '/username',
+  path: '/username',
+  getParentRoute: () => OnboardingRoute,
+} as any)
+const OnboardingPinRoute = OnboardingPinRouteImport.update({
+  id: '/pin',
+  path: '/pin',
+  getParentRoute: () => OnboardingRoute,
+} as any)
+const AppWithdrawRoute = AppWithdrawRouteImport.update({
+  id: '/withdraw',
+  path: '/withdraw',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSendRoute = AppSendRouteImport.update({
+  id: '/send',
+  path: '/send',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHomeRoute = AppHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHistoryRoute = AppHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDepositRoute = AppDepositRouteImport.update({
+  id: '/deposit',
+  path: '/deposit',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/protected-route': typeof AuthenticatedProtectedRouteRoute
+  '/onboarding': typeof OnboardingRouteWithChildren
+  '/deposit': typeof AppDepositRoute
+  '/history': typeof AppHistoryRoute
+  '/home': typeof AppHomeRoute
+  '/profile': typeof AppProfileRoute
+  '/send': typeof AppSendRoute
+  '/withdraw': typeof AppWithdrawRoute
+  '/onboarding/pin': typeof OnboardingPinRoute
+  '/onboarding/username': typeof OnboardingUsernameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/protected-route': typeof AuthenticatedProtectedRouteRoute
+  '/onboarding': typeof OnboardingRouteWithChildren
+  '/deposit': typeof AppDepositRoute
+  '/history': typeof AppHistoryRoute
+  '/home': typeof AppHomeRoute
+  '/profile': typeof AppProfileRoute
+  '/send': typeof AppSendRoute
+  '/withdraw': typeof AppWithdrawRoute
+  '/onboarding/pin': typeof OnboardingPinRoute
+  '/onboarding/username': typeof OnboardingUsernameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/about': typeof AboutRoute
-  '/_authenticated/protected-route': typeof AuthenticatedProtectedRouteRoute
+  '/_app': typeof AppRouteWithChildren
+  '/onboarding': typeof OnboardingRouteWithChildren
+  '/_app/deposit': typeof AppDepositRoute
+  '/_app/history': typeof AppHistoryRoute
+  '/_app/home': typeof AppHomeRoute
+  '/_app/profile': typeof AppProfileRoute
+  '/_app/send': typeof AppSendRoute
+  '/_app/withdraw': typeof AppWithdrawRoute
+  '/onboarding/pin': typeof OnboardingPinRoute
+  '/onboarding/username': typeof OnboardingUsernameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/protected-route'
+  fullPaths:
+    | '/'
+    | '/onboarding'
+    | '/deposit'
+    | '/history'
+    | '/home'
+    | '/profile'
+    | '/send'
+    | '/withdraw'
+    | '/onboarding/pin'
+    | '/onboarding/username'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/protected-route'
+  to:
+    | '/'
+    | '/onboarding'
+    | '/deposit'
+    | '/history'
+    | '/home'
+    | '/profile'
+    | '/send'
+    | '/withdraw'
+    | '/onboarding/pin'
+    | '/onboarding/username'
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
-    | '/about'
-    | '/_authenticated/protected-route'
+    | '/_app'
+    | '/onboarding'
+    | '/_app/deposit'
+    | '/_app/history'
+    | '/_app/home'
+    | '/_app/profile'
+    | '/_app/send'
+    | '/_app/withdraw'
+    | '/onboarding/pin'
+    | '/onboarding/username'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  AboutRoute: typeof AboutRoute
+  AppRoute: typeof AppRouteWithChildren
+  OnboardingRoute: typeof OnboardingRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
+    '/_app': {
+      id: '/_app'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -94,32 +183,103 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/protected-route': {
-      id: '/_authenticated/protected-route'
-      path: '/protected-route'
-      fullPath: '/protected-route'
-      preLoaderRoute: typeof AuthenticatedProtectedRouteRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/onboarding/username': {
+      id: '/onboarding/username'
+      path: '/username'
+      fullPath: '/onboarding/username'
+      preLoaderRoute: typeof OnboardingUsernameRouteImport
+      parentRoute: typeof OnboardingRoute
+    }
+    '/onboarding/pin': {
+      id: '/onboarding/pin'
+      path: '/pin'
+      fullPath: '/onboarding/pin'
+      preLoaderRoute: typeof OnboardingPinRouteImport
+      parentRoute: typeof OnboardingRoute
+    }
+    '/_app/withdraw': {
+      id: '/_app/withdraw'
+      path: '/withdraw'
+      fullPath: '/withdraw'
+      preLoaderRoute: typeof AppWithdrawRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/send': {
+      id: '/_app/send'
+      path: '/send'
+      fullPath: '/send'
+      preLoaderRoute: typeof AppSendRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/home': {
+      id: '/_app/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/history': {
+      id: '/_app/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof AppHistoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/deposit': {
+      id: '/_app/deposit'
+      path: '/deposit'
+      fullPath: '/deposit'
+      preLoaderRoute: typeof AppDepositRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
-interface AuthenticatedRouteChildren {
-  AuthenticatedProtectedRouteRoute: typeof AuthenticatedProtectedRouteRoute
+interface AppRouteChildren {
+  AppDepositRoute: typeof AppDepositRoute
+  AppHistoryRoute: typeof AppHistoryRoute
+  AppHomeRoute: typeof AppHomeRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppSendRoute: typeof AppSendRoute
+  AppWithdrawRoute: typeof AppWithdrawRoute
 }
 
-const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedProtectedRouteRoute: AuthenticatedProtectedRouteRoute,
+const AppRouteChildren: AppRouteChildren = {
+  AppDepositRoute: AppDepositRoute,
+  AppHistoryRoute: AppHistoryRoute,
+  AppHomeRoute: AppHomeRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppSendRoute: AppSendRoute,
+  AppWithdrawRoute: AppWithdrawRoute,
 }
 
-const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface OnboardingRouteChildren {
+  OnboardingPinRoute: typeof OnboardingPinRoute
+  OnboardingUsernameRoute: typeof OnboardingUsernameRoute
+}
+
+const OnboardingRouteChildren: OnboardingRouteChildren = {
+  OnboardingPinRoute: OnboardingPinRoute,
+  OnboardingUsernameRoute: OnboardingUsernameRoute,
+}
+
+const OnboardingRouteWithChildren = OnboardingRoute._addFileChildren(
+  OnboardingRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  AboutRoute: AboutRoute,
+  AppRoute: AppRouteWithChildren,
+  OnboardingRoute: OnboardingRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
