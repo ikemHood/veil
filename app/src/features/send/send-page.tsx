@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import toast from "react-hot-toast";
 import { FiCheck, FiShield } from "react-icons/fi";
+import { errorMessage } from "../../lib/errors";
 import { verifyTransactionPin } from "../onboarding/onboarding.store";
 import { PinPad } from "../onboarding/pin-pad";
 import { parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
@@ -43,7 +44,8 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
       toast.success("Payment sent privately");
       setStage("success");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Private send failed";
+      console.error("Private send failed", caught);
+      const message = errorMessage(caught, "Private send failed");
       toast.error(message);
       setError(message);
       setStage("form");

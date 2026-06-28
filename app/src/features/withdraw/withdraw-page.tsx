@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import toast from "react-hot-toast";
 import { FiCheck, FiShield } from "react-icons/fi";
+import { errorMessage } from "../../lib/errors";
 import { verifyTransactionPin } from "../onboarding/onboarding.store";
 import { PinPad } from "../onboarding/pin-pad";
 import { parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
@@ -43,7 +44,8 @@ export function WithdrawPage({ userId }: { userId: string }) {
       toast.success("Withdrawal complete");
       setStage("success");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Withdrawal failed";
+      console.error("Withdrawal failed", caught);
+      const message = errorMessage(caught, "Withdrawal failed");
       toast.error(message);
       setError(message);
       setStage("form");

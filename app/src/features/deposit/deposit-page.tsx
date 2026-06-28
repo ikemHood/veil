@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import toast from "react-hot-toast";
 import { FiCheck, FiShield } from "react-icons/fi";
+import { errorMessage } from "../../lib/errors";
 import { shieldDeposit } from "../privacy/shield.service";
 import { formatUsdAmount, parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
 import { makeTxId, formatCurrency } from "../transactions/format";
@@ -37,7 +38,8 @@ export function DepositPage({ userId }: { userId: string }) {
       toast.success("Your deposit is now private");
       setStage("success");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Deposit failed";
+      console.error("Deposit failed", caught);
+      const message = errorMessage(caught, "Deposit failed");
       toast.error(message);
       setError(message);
       setStage("form");
