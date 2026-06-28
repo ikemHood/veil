@@ -64,7 +64,8 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
 
 async function fetchCommitmentLeaves(rpc: StellarSdk.rpc.Server) {
   const latest = await rpc.getLatestLedger();
-  const startLedger = getWrapperStartLedger() ?? Math.max(0, latest.sequence - getEventLookbackLedgers());
+  const latestLedger = latest.sequence;
+  const startLedger = getWrapperStartLedger() ?? Math.max(0, latestLedger - getEventLookbackLedgers());
   const filters = ["wrap", "conf_transfer"].map((name) => ({
     type: "contract" as const,
     contractIds: [stellarConfig.wrapperContractId],
@@ -74,14 +75,37 @@ async function fetchCommitmentLeaves(rpc: StellarSdk.rpc.Server) {
   let cursor: string | undefined;
 
   do {
-    const response = cursor
-      ? await rpc.getEvents({ cursor, filters, limit: 200 })
-      : await rpc.getEvents({ startLedger, filters, limit: 200 });
+    const response = cursor ? await rpc.getEvents({ cursor, filters, limit: 200 }) : await getEventsFromLedger(rpc, filters, startLedger);
     for (const event of response.events) leaves.push(...commitmentsFromEvent(event));
     cursor = response.events.length > 0 && response.cursor ? response.cursor : undefined;
   } while (cursor);
 
   return leaves;
+}
+
+async function getEventsFromLedger(
+  rpc: StellarSdk.rpc.Server,
+  filters: StellarSdk.rpc.Api.EventFilter[],
+  startLedger: number,
+) {
+  try {
+    return await rpc.getEvents({ startLedger, filters, limit: 200 });
+  } catch (caught) {
+    const retryStartLedger = oldestLedgerFromError(caught);
+    if (!retryStartLedger || retryStartLedger === startLedger) throw caught;
+    return rpc.getEvents({ startLedger: retryStartLedger, filters, limit: 200 });
+  }
+}
+
+function oldestLedgerFromError(caught: unknown) {
+  const message =
+    caught instanceof Error
+      ? caught.message
+      : caught && typeof caught === "object" && "message" in caught && typeof caught.message === "string"
+        ? caught.message
+        : String(caught);
+  const match = message.match(/ledger range:\s*(\d+)\s*-\s*(\d+)/i);
+  return match?.[1] ? Number(match[1]) : null;
 }
 
 function commitmentsFromEvent(event: StellarSdk.rpc.Api.EventResponse) {

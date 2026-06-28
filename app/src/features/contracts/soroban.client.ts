@@ -29,7 +29,7 @@ export function getWrapperStartLedger() {
 
 export function getEventLookbackLedgers() {
   const value = Number(import.meta.env.VITE_EVENT_LOOKBACK_LEDGERS);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 200_000;
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 100_000;
 }
 
 export function requireAssetId() {
