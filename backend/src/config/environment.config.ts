@@ -10,7 +10,7 @@ export const env = createEnv({
 	server: {
 		// Server Configuration
 		NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-		PORT: z.coerce.number().default(3000),
+		PORT: z.coerce.number().default(3001),
 		LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
 		SHUTDOWN_TIMEOUT_MS: z.coerce.number().default(10000),
 

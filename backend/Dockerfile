@@ -40,7 +40,7 @@ RUN chown -R hono:nodejs /app
 USER hono
 
 # Expose application port
-EXPOSE 3000
+EXPOSE 3001
 
 # Set environment to production
 ENV NODE_ENV=production

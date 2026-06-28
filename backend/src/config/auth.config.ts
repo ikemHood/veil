@@ -18,7 +18,7 @@ export default async function createAuthConfig() {
 			provider: "pg",
 		}),
 		advanced: {
-			cookiePrefix: "gorucu-app",
+			cookiePrefix: "veil",
 		},
 		rateLimit: {
 			enabled: true,
@@ -71,7 +71,9 @@ export default async function createAuthConfig() {
 		},
 		plugins: [expo(), openAPI()],
 		trustedOrigins: [
-			"gorucu-app://",
+			"veil://",
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
 
 			// Development mode - Expo's exp:// scheme with local IP ranges
 			...(env.NODE_ENV === "development"

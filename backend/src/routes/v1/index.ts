@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 import type { AppEnv } from "@/core/types/app.types";
 import todoRoutes from "@/routes/v1/todo.route";
+import veilRoutes from "@/routes/v1/veil.route";
 
 /**
  * V1 API routes aggregator
@@ -13,6 +14,7 @@ export function createV1Routes() {
 
 	// Mount route groups
 	v1Routes.route("/todos", todoRoutes);
+	v1Routes.route("/veil", veilRoutes);
 
 	return v1Routes;
 }

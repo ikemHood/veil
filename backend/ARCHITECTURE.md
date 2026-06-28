@@ -309,7 +309,7 @@ Prometheus metrics available at `GET /metrics`:
 
 ```env
 NODE_ENV=production
-PORT=3000
+PORT=3001
 LOG_LEVEL=info
 DATABASE_URL=postgresql://...
 BETTER_AUTH_SECRET=<32+ char secret>

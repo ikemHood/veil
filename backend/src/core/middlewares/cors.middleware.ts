@@ -6,9 +6,12 @@ import { cors } from "hono/cors";
  */
 export function corsMiddleware() {
 	return cors({
-		origin: "*", // In production, replace with specific origins
+		origin: (origin) => {
+			const allowedOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
+			return allowedOrigins.has(origin) ? origin : "http://127.0.0.1:3000";
+		},
 		allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-		allowHeaders: ["Content-Type", "Authorization"],
+		allowHeaders: ["Content-Type", "Authorization", "Cookie"],
 		exposeHeaders: ["Content-Length", "Content-Type", "Authorization"],
 		credentials: true,
 		maxAge: 86400, // 24 hours

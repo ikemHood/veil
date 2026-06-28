@@ -1,6 +1,9 @@
 prd.txt
 .env
 .env.*
+!.env.example
+!app/.env.example
+!backend/.env.example
 node_modules/
 dist/
 dist-ssr/

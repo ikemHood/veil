@@ -1,12 +1,11 @@
+import { type FormEvent, type ReactNode, useState } from "react";
 import {
   FiArrowDownLeft,
   FiArrowUpRight,
   FiCheck,
   FiChevronRight,
   FiClock,
-  FiCreditCard,
   FiDownload,
-  FiEye,
   FiFileText,
   FiGlobe,
   FiHome,
@@ -18,21 +17,34 @@ import {
   FiUser,
   FiX,
 } from "react-icons/fi";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import {
+  claimVeilProfile,
+  resolveVeilHandle,
+  signInWithSocial,
+} from "./auth-client";
+import {
+  connectStellarWallet,
+  depositPrivate,
+  formatUsdAmount,
+  getPrivateBalance,
+  hasContractConfig,
+  parseUsdAmount,
+  sendPrivate,
+  unlockPrivateVault,
+  withdrawPrivate,
+  type PrivateTxResult,
+  type WalletConnection,
+} from "./stellar-private";
 import {
   createDisclosureProofId,
-  createMockRampQuote,
   createViewKey,
-  preparePrivacyProof,
   type ProofResult,
 } from "./veil-services";
 
 type OnboardingStep = "sign-in" | "pin" | "username" | "done";
 type Screen = "home" | "history" | "profile";
 type Sheet = "deposit" | "send" | "withdraw" | "details" | "disclosure" | null;
-type FlowStage = "form" | "review" | "pin" | "progress" | "success";
 type TxType = "deposit" | "send" | "receive" | "withdraw";
-type TxStatus = "completed" | "processing";
 
 type Transaction = {
   id: string;
@@ -40,11 +52,9 @@ type Transaction = {
   title: string;
   counterparty: string;
   amount: number;
-  status: TxStatus;
   date: string;
   proof: ProofResult;
   destination?: string;
-  receiptId?: string;
 };
 
 type DisclosureOptions = {
@@ -56,45 +66,9 @@ type DisclosureOptions = {
   provenance: boolean;
 };
 
-const initialTransactions: Transaction[] = [
-  {
-    id: "tx_opening_receive",
-    type: "receive",
-    title: "Private receive",
-    counterparty: "maya@veil",
-    amount: 240,
-    status: "completed",
-    date: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
-    proof: {
-      id: "proof_opening_receive",
-      commitment: "cm_9Bb4xKpT2LmQpR8sA7vY2nP",
-      generatedAt: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
-      action: "send",
-    },
-    receiptId: "rcpt_YJ29Q8",
-  },
-];
-
-const depositSteps = [
-  "Waiting for deposit",
-  "Deposit received",
-  "Securing deposit",
-  "Private balance updated",
-];
-
-const proofSteps = [
-  "Preparing private payment",
-  "Generating proof",
-  "Submitting securely",
-  "Private receipt ready",
-];
-
-const withdrawSteps = [
-  "Preparing withdrawal",
-  "Unshielding selected amount",
-  "Sending to destination",
-  "History updated",
-];
+function makeTxId() {
+  return `tx_${Date.now().toString(36)}`;
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -113,60 +87,74 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function makeTxId() {
-  return `tx_${Date.now().toString(36)}`;
+function amountToNumber(amount: bigint) {
+  return Number(amount) / 10_000_000;
+}
+
+function proofFromResult(action: ProofResult["action"], result: PrivateTxResult): ProofResult {
+  return {
+    id: result.proofId,
+    commitment: result.commitment ?? result.txHash,
+    nullifier: result.nullifier,
+    generatedAt: new Date().toISOString(),
+    action,
+  };
 }
 
 export function VeilWallet() {
-  const [onboardingStep, setOnboardingStep] =
-    useState<OnboardingStep>("sign-in");
+  const [step, setStep] = useState<OnboardingStep>("sign-in");
   const [pin, setPin] = useState("");
   const [pinDraft, setPinDraft] = useState("");
-  const [pinError, setPinError] = useState("");
   const [username, setUsername] = useState("ikem");
   const [handle, setHandle] = useState("ikem@veil");
+  const [wallet, setWallet] = useState<WalletConnection | null>(null);
+  const [privateBalance, setPrivateBalance] = useState<bigint>(0n);
   const [screen, setScreen] = useState<Screen>("home");
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [balance, setBalance] = useState(240);
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(initialTransactions);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
-  const [activeDisclosure, setActiveDisclosure] = useState<{
-    tx: Transaction;
-    viewKey: string;
-    proofId: string;
-    options: DisclosureOptions;
-  } | null>(null);
 
   const selectedTx = transactions.find((tx) => tx.id === selectedTxId) ?? null;
-  const recentTransactions = transactions.slice(0, 4);
-  const completedOnboarding = onboardingStep === "done";
+  const balance = amountToNumber(privateBalance);
 
-  const openSheet = (nextSheet: Sheet) => {
-    setSheet(nextSheet);
-    setActiveDisclosure(null);
+  const refreshBalance = () => {
+    try {
+      setPrivateBalance(getPrivateBalance());
+    } catch {
+      setPrivateBalance(0n);
+    }
   };
 
-  const openTx = (txId: string) => {
-    setSelectedTxId(txId);
-    openSheet("details");
-  };
+  const closeSheet = () => setSheet(null);
 
-  if (!completedOnboarding) {
+  if (step !== "done") {
     return (
       <main className="veil-root">
         <div className="phone-shell">
           <Onboarding
             handle={handle}
+            onClaim={async (cleanHandle) => {
+              const profile = await claimVeilProfile(cleanHandle, wallet?.address);
+              setHandle(`${profile.handle}@veil`);
+            }}
+            onConnectWallet={async () => {
+              const connection = await connectStellarWallet();
+              setWallet(connection);
+              return connection;
+            }}
+            onPin={async (value) => {
+              setPin(value);
+              await unlockPrivateVault(wallet?.address ?? handle, value);
+              refreshBalance();
+              setStep("username");
+            }}
+            onSocialSignIn={signInWithSocial}
             pinDraft={pinDraft}
-            pinError={pinError}
-            setPinDraft={setPinDraft}
-            setPinError={setPinError}
-            setPin={setPin}
             setHandle={setHandle}
-            setOnboardingStep={setOnboardingStep}
+            setPinDraft={setPinDraft}
+            setStep={setStep}
             setUsername={setUsername}
-            step={onboardingStep}
+            step={step}
             username={username}
           />
         </div>
@@ -195,27 +183,38 @@ export function VeilWallet() {
             <HomeScreen
               balance={balance}
               handle={handle}
-              openSheet={openSheet}
-              openTx={openTx}
-              recentTransactions={recentTransactions}
-              setScreen={setScreen}
+              openHistory={() => setScreen("history")}
+              openSheet={setSheet}
+              openTx={(txId) => {
+                setSelectedTxId(txId);
+                setSheet("details");
+              }}
+              transactions={transactions.slice(0, 4)}
+              wallet={wallet}
             />
           )}
 
           {screen === "history" && (
-            <HistoryScreen openTx={openTx} transactions={transactions} />
+            <HistoryScreen
+              openTx={(txId) => {
+                setSelectedTxId(txId);
+                setSheet("details");
+              }}
+              transactions={transactions}
+            />
           )}
 
           {screen === "profile" && (
             <ProfileScreen
               handle={handle}
-              transactionCount={transactions.length}
               reset={() => {
-                setOnboardingStep("sign-in");
+                setStep("sign-in");
                 setPin("");
                 setPinDraft("");
                 setSheet(null);
               }}
+              transactionCount={transactions.length}
+              wallet={wallet}
             />
           )}
 
@@ -224,23 +223,24 @@ export function VeilWallet() {
 
         {sheet === "deposit" && (
           <DepositSheet
-            close={() => setSheet(null)}
-            onComplete={(amount, proof) => {
-              setBalance((current) => current + amount);
+            close={closeSheet}
+            onComplete={async (amount) => {
+              const result = await depositPrivate(parseUsdAmount(String(amount)));
+              setPrivateBalance(result.balance);
+              const proof = proofFromResult("deposit", result);
               setTransactions((current) => [
                 {
                   id: makeTxId(),
                   type: "deposit",
                   title: "Deposit secured",
-                  counterparty: "Veil Dollar account",
+                  counterparty: "Stellar private vault",
                   amount,
-                  status: "completed",
                   date: new Date().toISOString(),
                   proof,
-                  receiptId: `rcpt_${makeTxId().slice(-7).toUpperCase()}`,
                 },
                 ...current,
               ]);
+              return proof;
             }}
           />
         )}
@@ -248,11 +248,16 @@ export function VeilWallet() {
         {sheet === "send" && (
           <SendSheet
             balance={balance}
-            close={() => setSheet(null)}
+            close={closeSheet}
             expectedPin={pin}
             handle={handle}
-            onComplete={(amount, recipient, proof) => {
-              setBalance((current) => current - amount);
+            onComplete={async (amount, recipient) => {
+              const recipientAddress = recipient.endsWith("@veil")
+                ? await resolveVeilHandle(recipient)
+                : recipient;
+              const result = await sendPrivate(parseUsdAmount(String(amount)), recipientAddress);
+              setPrivateBalance(result.balance);
+              const proof = proofFromResult("send", result);
               setTransactions((current) => [
                 {
                   id: makeTxId(),
@@ -260,13 +265,12 @@ export function VeilWallet() {
                   title: "Private send",
                   counterparty: recipient,
                   amount,
-                  status: "completed",
                   date: new Date().toISOString(),
                   proof,
-                  receiptId: `rcpt_${makeTxId().slice(-7).toUpperCase()}`,
                 },
                 ...current,
               ]);
+              return proof;
             }}
           />
         )}
@@ -274,10 +278,12 @@ export function VeilWallet() {
         {sheet === "withdraw" && (
           <WithdrawSheet
             balance={balance}
-            close={() => setSheet(null)}
+            close={closeSheet}
             expectedPin={pin}
-            onComplete={(amount, destination, proof) => {
-              setBalance((current) => current - amount);
+            onComplete={async (amount, destination) => {
+              const result = await withdrawPrivate(parseUsdAmount(String(amount)), destination);
+              setPrivateBalance(result.balance);
+              const proof = proofFromResult("withdraw", result);
               setTransactions((current) => [
                 {
                   id: makeTxId(),
@@ -285,34 +291,27 @@ export function VeilWallet() {
                   title: "Private balance withdrawal",
                   counterparty: "External wallet",
                   amount,
-                  status: "completed",
                   date: new Date().toISOString(),
                   proof,
                   destination,
-                  receiptId: `rcpt_${makeTxId().slice(-7).toUpperCase()}`,
                 },
                 ...current,
               ]);
+              return proof;
             }}
           />
         )}
 
         {sheet === "details" && selectedTx && (
           <TransactionDetailsSheet
-            close={() => setSheet(null)}
-            openDisclosure={() => openSheet("disclosure")}
+            close={closeSheet}
+            openDisclosure={() => setSheet("disclosure")}
             tx={selectedTx}
           />
         )}
 
         {sheet === "disclosure" && selectedTx && (
-          <DisclosureSheet
-            activeDisclosure={activeDisclosure}
-            close={() => setSheet(null)}
-            expectedPin={pin}
-            setActiveDisclosure={setActiveDisclosure}
-            tx={selectedTx}
-          />
+          <DisclosureSheet close={closeSheet} expectedPin={pin} tx={selectedTx} />
         )}
       </div>
     </main>
@@ -321,42 +320,51 @@ export function VeilWallet() {
 
 function Onboarding({
   handle,
+  onClaim,
+  onConnectWallet,
+  onPin,
+  onSocialSignIn,
   pinDraft,
-  pinError,
   setHandle,
-  setOnboardingStep,
-  setPin,
   setPinDraft,
-  setPinError,
+  setStep,
   setUsername,
   step,
   username,
 }: {
   handle: string;
+  onClaim: (handle: string) => Promise<void>;
+  onConnectWallet: () => Promise<WalletConnection>;
+  onPin: (pin: string) => Promise<void>;
+  onSocialSignIn: (provider: "google" | "facebook") => Promise<void>;
   pinDraft: string;
-  pinError: string;
   setHandle: (handle: string) => void;
-  setOnboardingStep: (step: OnboardingStep) => void;
-  setPin: (pin: string) => void;
   setPinDraft: (pin: string) => void;
-  setPinError: (message: string) => void;
+  setStep: (step: OnboardingStep) => void;
   setUsername: (username: string) => void;
   step: OnboardingStep;
   username: string;
 }) {
-  const steps: OnboardingStep[] = ["sign-in", "pin", "username", "done"];
-  const activeIndex = steps.indexOf(step);
+  const [error, setError] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [claiming, setClaiming] = useState(false);
 
-  const claimUsername = (event: FormEvent<HTMLFormElement>) => {
+  const claimUsername = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const clean = username
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]/g, "")
-      .slice(0, 18);
+    const clean = username.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 18);
     if (!clean) return;
-    setUsername(clean);
-    setHandle(`${clean}@veil`);
-    setOnboardingStep("done");
+    setClaiming(true);
+    setError("");
+    try {
+      await onClaim(clean);
+      setUsername(clean);
+      setHandle(`${clean}@veil`);
+      setStep("done");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Handle claim failed");
+    } finally {
+      setClaiming(false);
+    }
   };
 
   return (
@@ -367,11 +375,8 @@ function Onboarding({
           <span>Veil</span>
         </div>
         <div className="step-dots" aria-label="Onboarding progress">
-          {[0, 1, 2].map((index) => (
-            <span
-              className={index <= activeIndex ? "step-dot active" : "step-dot"}
-              key={index}
-            />
+          {["sign-in", "pin", "username"].map((item) => (
+            <span className={item === step ? "step-dot active" : "step-dot"} key={item} />
           ))}
         </div>
       </div>
@@ -380,17 +385,50 @@ function Onboarding({
         <div className="onboarding-card">
           <FiGlobe className="hero-icon" />
           <h1>Private dollars, ready anywhere</h1>
-          <p>
-            Access a global dollar wallet with private transfers on by default.
-          </p>
+          <p>Sign in, connect a Stellar wallet, then keep notes encrypted on this device.</p>
+          <div className="social-grid">
+            <button
+              className="secondary-button dark-surface"
+              type="button"
+              onClick={() =>
+                onSocialSignIn("google").catch((caught: unknown) =>
+                  setError(caught instanceof Error ? caught.message : "Google sign-in failed"),
+                )
+              }
+            >
+              Google
+            </button>
+            <button
+              className="secondary-button dark-surface"
+              type="button"
+              onClick={() =>
+                onSocialSignIn("facebook").catch((caught: unknown) =>
+                  setError(caught instanceof Error ? caught.message : "Facebook sign-in failed"),
+                )
+              }
+            >
+              Facebook
+            </button>
+          </div>
           <button
             className="primary-button"
             type="button"
-            onClick={() => setOnboardingStep("pin")}
+            onClick={() =>
+              onConnectWallet()
+                .then((wallet) => {
+                  setWalletAddress(wallet.address);
+                  setStep("pin");
+                })
+                .catch((caught: unknown) =>
+                  setError(caught instanceof Error ? caught.message : "Wallet connection failed"),
+                )
+            }
           >
             <FiShield />
-            Sign in
+            Connect Stellar wallet
           </button>
+          {walletAddress && <div className="handle-preview">{walletAddress}</div>}
+          {error && <p className="pin-error">{error}</p>}
         </div>
       )}
 
@@ -398,18 +436,19 @@ function Onboarding({
         <div className="onboarding-card">
           <FiLock className="hero-icon" />
           <h1>Set transaction PIN</h1>
-          <p>Use this PIN to approve sends, withdrawals, and disclosures.</p>
+          <p>Your PIN encrypts local notes and approves private actions.</p>
           <PinPad
-            error={pinError}
+            error={error}
             onChange={(value) => {
               setPinDraft(value);
-              setPinError("");
+              setError("");
             }}
-            onComplete={(value) => {
-              setPin(value);
-              setPinDraft("");
-              setOnboardingStep("username");
-            }}
+            onComplete={(value) =>
+              onPin(value).catch((caught: unknown) => {
+                setPinDraft("");
+                setError(caught instanceof Error ? caught.message : "Vault unlock failed");
+              })
+            }
             value={pinDraft}
           />
         </div>
@@ -419,7 +458,7 @@ function Onboarding({
         <form className="onboarding-card" onSubmit={claimUsername}>
           <FiUser className="hero-icon" />
           <h1>Claim payment handle</h1>
-          <p>People can pay you by username instead of address.</p>
+          <p>Handles resolve to wallet addresses for private sends.</p>
           <label className="field-label" htmlFor="username">
             Username
           </label>
@@ -433,10 +472,11 @@ function Onboarding({
             <span>@veil</span>
           </div>
           <div className="handle-preview">{handle}</div>
-          <button className="primary-button" type="submit">
+          <button className="primary-button" disabled={claiming} type="submit">
             <FiCheck />
-            Continue
+            {claiming ? "Claiming..." : "Continue"}
           </button>
+          {error && <p className="pin-error">{error}</p>}
         </form>
       )}
     </section>
@@ -446,17 +486,19 @@ function Onboarding({
 function HomeScreen({
   balance,
   handle,
+  openHistory,
   openSheet,
   openTx,
-  recentTransactions,
-  setScreen,
+  transactions,
+  wallet,
 }: {
   balance: number;
   handle: string;
+  openHistory: () => void;
   openSheet: (sheet: Sheet) => void;
   openTx: (txId: string) => void;
-  recentTransactions: Transaction[];
-  setScreen: (screen: Screen) => void;
+  transactions: Transaction[];
+  wallet: WalletConnection | null;
 }) {
   return (
     <div className="screen-content">
@@ -475,32 +517,33 @@ function HomeScreen({
         </div>
       </section>
 
+      <section className={hasContractConfig() ? "wallet-strip" : "setup-warning"}>
+        <FiShield />
+        <span>
+          {hasContractConfig()
+            ? wallet?.address ?? "Connect Stellar wallet"
+            : "Set VITE_WRAPPER_CONTRACT_ID, VITE_VERIFIER_CONTRACT_ID, and VITE_ASSET_ADDRESS."}
+        </span>
+      </section>
+
       <section className="action-grid" aria-label="Main actions">
         <ActionButton icon={<FiPlus />} label="Deposit" onClick={() => openSheet("deposit")} />
         <ActionButton icon={<FiSend />} label="Send" onClick={() => openSheet("send")} />
         <ActionButton icon={<FiDownload />} label="Withdraw" onClick={() => openSheet("withdraw")} />
-        <ActionButton icon={<FiClock />} label="History" onClick={() => setScreen("history")} />
+        <ActionButton icon={<FiClock />} label="History" onClick={openHistory} />
       </section>
 
       <section className="status-grid">
-        <StatusCard
-          icon={<FiLock />}
-          label="Privacy status"
-          value="Private by default"
-        />
-        <StatusCard
-          icon={<FiFileText />}
-          label="Compliance"
-          value="Receipts available"
-        />
+        <StatusCard icon={<FiLock />} label="Notes vault" value="Encrypted locally" />
+        <StatusCard icon={<FiFileText />} label="ZK proofs" value="Circom Groth16" />
       </section>
 
       <section className="section-block">
         <div className="section-heading">
           <h2>Recent activity</h2>
-          <span>Latest</span>
+          <span>{transactions.length ? "Latest" : "Empty"}</span>
         </div>
-        <TransactionList onOpen={openTx} transactions={recentTransactions} />
+        <TransactionList onOpen={openTx} transactions={transactions} />
       </section>
     </div>
   );
@@ -530,21 +573,22 @@ function ProfileScreen({
   handle,
   reset,
   transactionCount,
+  wallet,
 }: {
   handle: string;
   reset: () => void;
   transactionCount: number;
+  wallet: WalletConnection | null;
 }) {
   return (
     <div className="screen-content">
       <section className="profile-panel">
         <span className="avatar">{handle.slice(0, 1).toUpperCase()}</span>
         <h1>{handle}</h1>
-        <p>Private dollar wallet active</p>
+        <p>{wallet?.address ?? "No wallet connected"}</p>
       </section>
       <section className="settings-list">
         <InfoRow icon={<FiShield />} label="Default privacy" value="Enabled" />
-        <InfoRow icon={<FiFileText />} label="Disclosure tools" value="Ready" />
         <InfoRow icon={<FiFileText />} label="Receipts" value={`${transactionCount}`} />
       </section>
       <button className="secondary-button danger" type="button" onClick={reset}>
@@ -560,30 +604,25 @@ function DepositSheet({
   onComplete,
 }: {
   close: () => void;
-  onComplete: (amount: number, proof: ProofResult) => void;
+  onComplete: (amount: number) => Promise<ProofResult>;
 }) {
-  const [amount, setAmount] = useState("300");
-  const [stage, setStage] = useState<FlowStage>("form");
-  const [stepIndex, setStepIndex] = useState(0);
+  const [amount, setAmount] = useState("100");
+  const [stage, setStage] = useState<"form" | "progress" | "success">("form");
+  const [error, setError] = useState("");
   const [proof, setProof] = useState<ProofResult | null>(null);
   const numericAmount = Number(amount);
-  const quote = useMemo(
-    () => createMockRampQuote(Number.isFinite(numericAmount) ? numericAmount : 0),
-    [numericAmount],
-  );
 
-  const runDeposit = async () => {
-    if (!numericAmount || numericAmount <= 0) return;
+  const run = async () => {
+    setError("");
     setStage("progress");
-    setStepIndex(0);
-    for (let index = 0; index < depositSteps.length; index += 1) {
-      setStepIndex(index);
-      await new Promise((resolve) => window.setTimeout(resolve, 620));
+    try {
+      const nextProof = await onComplete(numericAmount);
+      setProof(nextProof);
+      setStage("success");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Deposit failed");
+      setStage("form");
     }
-    const nextProof = await preparePrivacyProof("deposit");
-    setProof(nextProof);
-    onComplete(numericAmount, nextProof);
-    setStage("success");
   };
 
   return (
@@ -591,38 +630,16 @@ function DepositSheet({
       {stage === "form" && (
         <div className="flow-stack">
           <AmountField amount={amount} setAmount={setAmount} />
-          <div className="preset-row">
-            {[100, 300, 500].map((value) => (
-              <button key={value} type="button" onClick={() => setAmount(String(value))}>
-                {formatCurrency(value)}
-              </button>
-            ))}
-          </div>
-          <div className="instruction-card">
-            <span>Deposit instructions</span>
-            <strong>{quote.providerRef}</strong>
-            <p>
-              Add dollars by card or bank transfer. Funds are secured into your
-              private balance after arrival.
-            </p>
-          </div>
-          <button className="primary-button" type="button" onClick={runDeposit}>
-            <FiCreditCard />
+          <p className="quiet-line">Deposit submits `wrap` to the cstellar adapter and saves the note encrypted.</p>
+          <button className="primary-button" type="button" onClick={run}>
             Continue
           </button>
+          {error && <p className="pin-error">{error}</p>}
         </div>
       )}
-
-      {stage === "progress" && (
-        <ProgressState steps={depositSteps} activeIndex={stepIndex} />
-      )}
-
+      {stage === "progress" && <ProgressState steps={["Preparing note", "Submitting wrap", "Saving encrypted note"]} />}
       {stage === "success" && proof && (
-        <SuccessState
-          action="Deposit secured"
-          detail={`${formatCurrency(numericAmount)} added to private balance`}
-          proof={proof}
-        />
+        <SuccessState action="Deposit secured" detail={`${formatCurrency(numericAmount)} shielded`} proof={proof} />
       )}
     </BottomSheet>
   );
@@ -639,101 +656,67 @@ function SendSheet({
   close: () => void;
   expectedPin: string;
   handle: string;
-  onComplete: (amount: number, recipient: string, proof: ProofResult) => void;
+  onComplete: (amount: number, recipient: string) => Promise<ProofResult>;
 }) {
   const [recipient, setRecipient] = useState("maya@veil");
-  const [amount, setAmount] = useState("75");
-  const [stage, setStage] = useState<FlowStage>("form");
-  const [stepIndex, setStepIndex] = useState(0);
-  const [enteredPin, setEnteredPin] = useState("");
-  const [pinError, setPinError] = useState("");
+  const [amount, setAmount] = useState("25");
+  const [stage, setStage] = useState<"form" | "review" | "pin" | "progress" | "success">("form");
+  const [pinValue, setPinValue] = useState("");
+  const [error, setError] = useState("");
   const [proof, setProof] = useState<ProofResult | null>(null);
   const numericAmount = Number(amount);
-  const canContinue =
-    recipient.includes("@veil") && numericAmount > 0 && numericAmount <= balance;
 
-  const runSend = async () => {
+  const run = async () => {
     setStage("progress");
-    for (let index = 0; index < proofSteps.length; index += 1) {
-      setStepIndex(index);
-      await new Promise((resolve) => window.setTimeout(resolve, 560));
+    setError("");
+    try {
+      const nextProof = await onComplete(numericAmount, recipient);
+      setProof(nextProof);
+      setStage("success");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Private send failed");
+      setStage("form");
     }
-    const nextProof = await preparePrivacyProof("send");
-    setProof(nextProof);
-    onComplete(numericAmount, recipient, nextProof);
-    setStage("success");
   };
 
   return (
     <BottomSheet close={close} title="Send">
       {stage === "form" && (
-        <form
-          className="flow-stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canContinue) setStage("review");
-          }}
-        >
-          <label className="field-label" htmlFor="recipient">
-            Recipient username
-          </label>
-          <input
-            className="text-field"
-            id="recipient"
-            onChange={(event) => setRecipient(event.target.value)}
-            value={recipient}
-          />
+        <form className="flow-stack" onSubmit={(event) => { event.preventDefault(); setStage("review"); }}>
+          <label className="field-label" htmlFor="recipient">Recipient</label>
+          <input className="text-field" id="recipient" onChange={(event) => setRecipient(event.target.value)} value={recipient} />
           <AmountField amount={amount} setAmount={setAmount} />
           <p className="quiet-line">Available {formatCurrency(balance)}</p>
-          <button className="primary-button" disabled={!canContinue} type="submit">
-            Review payment
-          </button>
+          <button className="primary-button" disabled={numericAmount <= 0 || numericAmount > balance} type="submit">Review payment</button>
+          {error && <p className="pin-error">{error}</p>}
         </form>
       )}
-
       {stage === "review" && (
         <ReviewBlock
           cta="Confirm with PIN"
-          items={[
-            ["From", handle],
-            ["To", recipient],
-            ["Amount", formatCurrency(numericAmount)],
-            ["Privacy", "Private by default"],
-          ]}
+          items={[["From", handle], ["To", recipient], ["Amount", formatCurrency(numericAmount)], ["Privacy", "Private by default"]]}
           onBack={() => setStage("form")}
           onContinue={() => setStage("pin")}
         />
       )}
-
       {stage === "pin" && (
         <PinPad
-          error={pinError}
-          onChange={(value) => {
-            setEnteredPin(value);
-            setPinError("");
-          }}
+          error={error}
+          onChange={(value) => { setPinValue(value); setError(""); }}
           onComplete={(value) => {
             if (value !== expectedPin) {
-              setEnteredPin("");
-              setPinError("PIN does not match");
+              setPinValue("");
+              setError("PIN does not match");
               return;
             }
-            void runSend();
+            void run();
           }}
-          value={enteredPin}
+          value={pinValue}
         />
       )}
-
-      {stage === "progress" && (
-        <ProgressState steps={proofSteps} activeIndex={stepIndex} />
-      )}
-
+      {stage === "progress" && <ProgressState steps={["Generating proof", "Submitting private transfer", "Updating notes"]} />}
       {stage === "success" && proof && (
-        <SuccessState
-          action="Payment sent privately"
-          detail={`${formatCurrency(numericAmount)} to ${recipient}`}
-          proof={proof}
-        />
+        <SuccessState action="Payment sent privately" detail={`${formatCurrency(numericAmount)} to ${recipient}`} proof={proof} />
       )}
     </BottomSheet>
   );
@@ -748,237 +731,133 @@ function WithdrawSheet({
   balance: number;
   close: () => void;
   expectedPin: string;
-  onComplete: (amount: number, destination: string, proof: ProofResult) => void;
+  onComplete: (amount: number, destination: string) => Promise<ProofResult>;
 }) {
-  const [destination, setDestination] = useState("GDL4QPRZ...J9KW");
-  const [amount, setAmount] = useState("50");
-  const [stage, setStage] = useState<FlowStage>("form");
-  const [enteredPin, setEnteredPin] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [stepIndex, setStepIndex] = useState(0);
+  const [destination, setDestination] = useState("G...");
+  const [amount, setAmount] = useState("25");
+  const [stage, setStage] = useState<"form" | "review" | "pin" | "progress" | "success">("form");
+  const [pinValue, setPinValue] = useState("");
+  const [error, setError] = useState("");
   const [proof, setProof] = useState<ProofResult | null>(null);
   const numericAmount = Number(amount);
-  const canContinue = destination.length >= 8 && numericAmount > 0 && numericAmount <= balance;
 
-  const runWithdraw = async () => {
+  const run = async () => {
     setStage("progress");
-    for (let index = 0; index < withdrawSteps.length; index += 1) {
-      setStepIndex(index);
-      await new Promise((resolve) => window.setTimeout(resolve, 580));
+    setError("");
+    try {
+      const nextProof = await onComplete(numericAmount, destination);
+      setProof(nextProof);
+      setStage("success");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Withdrawal failed");
+      setStage("form");
     }
-    const nextProof = await preparePrivacyProof("withdraw");
-    setProof(nextProof);
-    onComplete(numericAmount, destination, nextProof);
-    setStage("success");
   };
 
   return (
     <BottomSheet close={close} title="Withdraw">
       {stage === "form" && (
-        <form
-          className="flow-stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canContinue) setStage("review");
-          }}
-        >
-          <label className="field-label" htmlFor="destination">
-            Destination address
-          </label>
-          <input
-            className="text-field"
-            id="destination"
-            onChange={(event) => setDestination(event.target.value)}
-            value={destination}
-          />
+        <form className="flow-stack" onSubmit={(event) => { event.preventDefault(); setStage("review"); }}>
+          <label className="field-label" htmlFor="destination">Destination address</label>
+          <input className="text-field" id="destination" onChange={(event) => setDestination(event.target.value)} value={destination} />
           <AmountField amount={amount} setAmount={setAmount} />
-          <button className="primary-button" disabled={!canContinue} type="submit">
-            Review withdrawal
-          </button>
+          <button className="primary-button" disabled={numericAmount <= 0 || numericAmount > balance} type="submit">Review withdrawal</button>
+          {error && <p className="pin-error">{error}</p>}
         </form>
       )}
-
       {stage === "review" && (
         <ReviewBlock
           cta="Confirm with PIN"
-          items={[
-            ["Destination", destination],
-            ["Amount", formatCurrency(numericAmount)],
-            ["Private balance after", formatCurrency(balance - numericAmount)],
-            ["Privacy impact", "Only selected amount leaves private balance"],
-          ]}
+          items={[["Destination", destination], ["Amount", formatCurrency(numericAmount)], ["Private balance after", formatCurrency(balance - numericAmount)], ["Privacy impact", "Only selected amount exits"]]}
           onBack={() => setStage("form")}
           onContinue={() => setStage("pin")}
         />
       )}
-
       {stage === "pin" && (
         <PinPad
-          error={pinError}
-          onChange={(value) => {
-            setEnteredPin(value);
-            setPinError("");
-          }}
+          error={error}
+          onChange={(value) => { setPinValue(value); setError(""); }}
           onComplete={(value) => {
             if (value !== expectedPin) {
-              setEnteredPin("");
-              setPinError("PIN does not match");
+              setPinValue("");
+              setError("PIN does not match");
               return;
             }
-            void runWithdraw();
+            void run();
           }}
-          value={enteredPin}
+          value={pinValue}
         />
       )}
-
-      {stage === "progress" && (
-        <ProgressState steps={withdrawSteps} activeIndex={stepIndex} />
-      )}
-
+      {stage === "progress" && <ProgressState steps={["Preparing proof", "Unshielding selected amount", "Submitting withdrawal"]} />}
       {stage === "success" && proof && (
-        <SuccessState
-          action="Withdrawal complete"
-          detail={`${formatCurrency(numericAmount)} sent out`}
-          proof={proof}
-        />
+        <SuccessState action="Withdrawal complete" detail={`${formatCurrency(numericAmount)} sent out`} proof={proof} />
       )}
     </BottomSheet>
   );
 }
 
 function DisclosureSheet({
-  activeDisclosure,
   close,
   expectedPin,
-  setActiveDisclosure,
   tx,
 }: {
-  activeDisclosure: {
-    tx: Transaction;
-    viewKey: string;
-    proofId: string;
-    options: DisclosureOptions;
-  } | null;
   close: () => void;
   expectedPin: string;
-  setActiveDisclosure: (value: {
-    tx: Transaction;
+  tx: Transaction;
+}) {
+  const [pinValue, setPinValue] = useState("");
+  const [error, setError] = useState("");
+  const [receipt, setReceipt] = useState<{
     viewKey: string;
     proofId: string;
     options: DisclosureOptions;
-  } | null) => void;
-  tx: Transaction;
-}) {
-  const [options, setOptions] = useState<DisclosureOptions>({
+  } | null>(null);
+  const options: DisclosureOptions = {
     amount: true,
     date: true,
     sender: tx.type !== "deposit",
     recipient: tx.type !== "withdraw",
     destination: tx.type === "withdraw",
     provenance: true,
-  });
-  const [pinValue, setPinValue] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [needsPin, setNeedsPin] = useState(true);
-
-  const toggle = (key: keyof DisclosureOptions) => {
-    setOptions((current) => ({ ...current, [key]: !current[key] }));
   };
 
   return (
     <BottomSheet close={close} title="Disclosure">
-      {!activeDisclosure && needsPin && (
+      {!receipt && (
         <div className="flow-stack">
-          <p className="quiet-line">
-            Confirm PIN before generating a view key, disclosure proof, or
-            compliance receipt.
-          </p>
+          <p className="quiet-line">Confirm PIN before generating a view key, disclosure proof, or receipt.</p>
           <PinPad
-            error={pinError}
-            onChange={(value) => {
-              setPinValue(value);
-              setPinError("");
-            }}
+            error={error}
+            onChange={(value) => { setPinValue(value); setError(""); }}
             onComplete={(value) => {
               if (value !== expectedPin) {
                 setPinValue("");
-                setPinError("PIN does not match");
+                setError("PIN does not match");
                 return;
               }
-              setNeedsPin(false);
+              setReceipt({ viewKey: createViewKey(), proofId: createDisclosureProofId(), options });
             }}
             value={pinValue}
           />
         </div>
       )}
-
-      {!activeDisclosure && !needsPin && (
-        <div className="flow-stack">
-          <div className="disclosure-options">
-            {Object.entries(options).map(([key, checked]) => (
-              <label key={key}>
-                <span>{disclosureLabel(key as keyof DisclosureOptions)}</span>
-                <input
-                  checked={checked}
-                  onChange={() => toggle(key as keyof DisclosureOptions)}
-                  type="checkbox"
-                />
-              </label>
-            ))}
-          </div>
-          <div className="privacy-note">
-            Selected fields are revealed. Balance, PIN, unrelated activity, and
-            private contacts remain hidden.
-          </div>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() =>
-              setActiveDisclosure({
-                tx,
-                viewKey: createViewKey(),
-                proofId: createDisclosureProofId(),
-                options,
-              })
-            }
-          >
-            <FiFileText />
-            Generate compliance receipt
-          </button>
-        </div>
-      )}
-
-      {activeDisclosure && (
+      {receipt && (
         <div className="receipt-card">
           <div className="receipt-header">
             <FiFileText />
             <div>
               <strong>Compliance receipt</strong>
-              <span>{activeDisclosure.proofId}</span>
+              <span>{receipt.proofId}</span>
             </div>
           </div>
-          <ReceiptLine label="View key" value={activeDisclosure.viewKey} />
-          {activeDisclosure.options.amount && (
-            <ReceiptLine label="Amount" value={formatCurrency(tx.amount)} />
-          )}
-          {activeDisclosure.options.date && (
-            <ReceiptLine label="Date" value={formatDate(tx.date)} />
-          )}
-          {activeDisclosure.options.sender && (
-            <ReceiptLine label="Sender" value={tx.type === "send" ? "You" : tx.counterparty} />
-          )}
-          {activeDisclosure.options.recipient && (
-            <ReceiptLine label="Recipient" value={tx.type === "send" ? tx.counterparty : "You"} />
-          )}
-          {activeDisclosure.options.destination && tx.destination && (
-            <ReceiptLine label="Withdrawal destination" value={tx.destination} />
-          )}
-          {activeDisclosure.options.provenance && (
-            <ReceiptLine label="Source proof" value={tx.proof.commitment} />
-          )}
-          <button className="secondary-button" type="button" onClick={close}>
-            Done
-          </button>
+          <ReceiptLine label="View key" value={receipt.viewKey} />
+          {receipt.options.amount && <ReceiptLine label="Amount" value={formatCurrency(tx.amount)} />}
+          {receipt.options.date && <ReceiptLine label="Date" value={formatDate(tx.date)} />}
+          {receipt.options.sender && <ReceiptLine label="Sender" value={tx.type === "send" ? "You" : tx.counterparty} />}
+          {receipt.options.recipient && <ReceiptLine label="Recipient" value={tx.type === "send" ? tx.counterparty : "You"} />}
+          {receipt.options.destination && tx.destination && <ReceiptLine label="Withdrawal destination" value={tx.destination} />}
+          {receipt.options.provenance && <ReceiptLine label="Source proof" value={tx.proof.commitment} />}
+          <button className="secondary-button" type="button" onClick={close}>Done</button>
         </div>
       )}
     </BottomSheet>
@@ -1004,11 +883,8 @@ function TransactionDetailsSheet({
       <div className="settings-list compact">
         <InfoRow icon={<FiUser />} label="Counterparty" value={tx.counterparty} />
         <InfoRow icon={<FiClock />} label="Date" value={formatDate(tx.date)} />
-        <InfoRow icon={<FiShield />} label="Status" value={tx.status} />
-        {tx.destination && (
-          <InfoRow icon={<FiGlobe />} label="Destination" value={tx.destination} />
-        )}
-        <InfoRow icon={<FiEye />} label="Proof" value={tx.proof.id} />
+        <InfoRow icon={<FiShield />} label="Proof" value={tx.proof.id} />
+        {tx.destination && <InfoRow icon={<FiGlobe />} label="Destination" value={tx.destination} />}
       </div>
       <button className="primary-button" type="button" onClick={openDisclosure}>
         <FiFileText />
@@ -1018,15 +894,7 @@ function TransactionDetailsSheet({
   );
 }
 
-function BottomSheet({
-  children,
-  close,
-  title,
-}: {
-  children: ReactNode;
-  close: () => void;
-  title: string;
-}) {
+function BottomSheet({ children, close, title }: { children: ReactNode; close: () => void; title: string }) {
   return (
     <div className="sheet-backdrop">
       <section className="bottom-sheet" aria-label={title}>
@@ -1042,29 +910,15 @@ function BottomSheet({
   );
 }
 
-function AmountField({
-  amount,
-  setAmount,
-}: {
-  amount: string;
-  setAmount: (amount: string) => void;
-}) {
+function AmountField({ amount, setAmount }: { amount: string; setAmount: (amount: string) => void }) {
   return (
     <div>
-      <label className="field-label" htmlFor="amount">
-        Amount
-      </label>
+      <label className="field-label" htmlFor="amount">Amount</label>
       <div className="money-input">
         <span>$</span>
-        <input
-          id="amount"
-          inputMode="decimal"
-          min="0"
-          onChange={(event) => setAmount(event.target.value)}
-          type="number"
-          value={amount}
-        />
+        <input id="amount" inputMode="decimal" min="0" onChange={(event) => setAmount(event.target.value)} type="number" value={amount} />
       </div>
+      <p className="quiet-line">{formatUsdAmount(parseUsdAmount(amount || "0"))}</p>
     </div>
   );
 }
@@ -1089,10 +943,8 @@ function PinPad({
 
   return (
     <div className="pin-pad">
-      <div className="pin-dots" aria-label={`${value.length} of 4 PIN digits entered`}>
-        {[0, 1, 2, 3].map((index) => (
-          <span className={index < value.length ? "filled" : ""} key={index} />
-        ))}
+      <div className="pin-dots">
+        {[0, 1, 2, 3].map((index) => <span className={index < value.length ? "filled" : ""} key={index} />)}
       </div>
       <div className="keypad">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"].map((key) =>
@@ -1103,11 +955,8 @@ function PinPad({
               className="key-button"
               key={key}
               onClick={() => {
-                if (key === "back") {
-                  onChange(value.slice(0, -1));
-                  return;
-                }
-                press(key);
+                if (key === "back") onChange(value.slice(0, -1));
+                else press(key);
               }}
               type="button"
             >
@@ -1121,13 +970,7 @@ function PinPad({
   );
 }
 
-function ProgressState({
-  activeIndex,
-  steps,
-}: {
-  activeIndex: number;
-  steps: string[];
-}) {
+function ProgressState({ steps }: { steps: string[] }) {
   return (
     <div className="progress-state">
       <div className="spinner-ring">
@@ -1135,8 +978,8 @@ function ProgressState({
       </div>
       <div className="progress-list">
         {steps.map((step, index) => (
-          <div className={index <= activeIndex ? "done" : ""} key={step}>
-            <span>{index < activeIndex ? <FiCheck /> : index + 1}</span>
+          <div className="done" key={step}>
+            <span>{index + 1}</span>
             <p>{step}</p>
           </div>
         ))}
@@ -1145,20 +988,10 @@ function ProgressState({
   );
 }
 
-function SuccessState({
-  action,
-  detail,
-  proof,
-}: {
-  action: string;
-  detail: string;
-  proof: ProofResult;
-}) {
+function SuccessState({ action, detail, proof }: { action: string; detail: string; proof: ProofResult }) {
   return (
     <div className="success-state">
-      <span className="success-icon">
-        <FiCheck />
-      </span>
+      <span className="success-icon"><FiCheck /></span>
       <h3>{action}</h3>
       <p>{detail}</p>
       <div className="receipt-card mini">
@@ -1183,44 +1016,26 @@ function ReviewBlock({
   return (
     <div className="flow-stack">
       <div className="review-card">
-        {items.map(([label, value]) => (
-          <ReceiptLine key={label} label={label} value={value} />
-        ))}
+        {items.map(([label, value]) => <ReceiptLine key={label} label={label} value={value} />)}
       </div>
       <div className="dual-actions">
-        <button className="secondary-button" type="button" onClick={onBack}>
-          Back
-        </button>
-        <button className="primary-button" type="button" onClick={onContinue}>
-          {cta}
-        </button>
+        <button className="secondary-button" type="button" onClick={onBack}>Back</button>
+        <button className="primary-button" type="button" onClick={onContinue}>{cta}</button>
       </div>
     </div>
   );
 }
 
-function BottomNav({
-  screen,
-  setScreen,
-}: {
-  screen: Screen;
-  setScreen: (screen: Screen) => void;
-}) {
+function BottomNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: Screen) => void }) {
   const items: Array<[Screen, ReactNode, string]> = [
     ["home", <FiHome />, "Home"],
     ["history", <FiClock />, "History"],
     ["profile", <FiUser />, "Profile"],
   ];
-
   return (
     <nav className="bottom-nav">
       {items.map(([value, icon, label]) => (
-        <button
-          className={screen === value ? "active" : ""}
-          key={value}
-          onClick={() => setScreen(value)}
-          type="button"
-        >
+        <button className={screen === value ? "active" : ""} key={value} onClick={() => setScreen(value)} type="button">
           {icon}
           <span>{label}</span>
         </button>
@@ -1229,17 +1044,8 @@ function BottomNav({
   );
 }
 
-function TransactionList({
-  onOpen,
-  transactions,
-}: {
-  onOpen: (txId: string) => void;
-  transactions: Transaction[];
-}) {
-  if (transactions.length === 0) {
-    return <div className="empty-state">No private activity yet.</div>;
-  }
-
+function TransactionList({ onOpen, transactions }: { onOpen: (txId: string) => void; transactions: Transaction[] }) {
+  if (transactions.length === 0) return <div className="empty-state">No private activity yet.</div>;
   return (
     <div className="transaction-list">
       {transactions.map((tx) => (
@@ -1262,20 +1068,11 @@ function TransactionList({
 }
 
 function TransactionIcon({ type }: { type: TxType }) {
-  const icon =
-    type === "deposit" || type === "receive" ? <FiArrowDownLeft /> : <FiArrowUpRight />;
+  const icon = type === "deposit" || type === "receive" ? <FiArrowDownLeft /> : <FiArrowUpRight />;
   return <span className={`tx-icon ${type}`}>{icon}</span>;
 }
 
-function ActionButton({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
+function ActionButton({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
     <button className="action-button" type="button" onClick={onClick}>
       <span>{icon}</span>
@@ -1284,15 +1081,7 @@ function ActionButton({
   );
 }
 
-function StatusCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-}) {
+function StatusCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="status-card">
       <span>{icon}</span>
@@ -1302,15 +1091,7 @@ function StatusCard({
   );
 }
 
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-}) {
+function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="info-row">
       <span>{icon}</span>
@@ -1327,16 +1108,4 @@ function ReceiptLine({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
-}
-
-function disclosureLabel(key: keyof DisclosureOptions) {
-  const labels: Record<keyof DisclosureOptions, string> = {
-    amount: "Amount",
-    date: "Date",
-    sender: "Sender",
-    recipient: "Recipient",
-    destination: "Withdrawal destination",
-    provenance: "Source proof",
-  };
-  return labels[key];
 }
