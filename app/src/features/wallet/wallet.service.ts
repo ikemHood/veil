@@ -1,4 +1,4 @@
-import { getSigner, loadWallet, provisionWallet, updateWalletUsername } from "./wallet-sdk.adapter";
+import { getSigner, loadWallet, provisionWallet, requestTestnetFaucet, updateWalletUsername } from "./wallet-sdk.adapter";
 import type { WalletService } from "./wallet.types";
 
 export const walletService: WalletService = {
@@ -16,3 +16,7 @@ export const walletService: WalletService = {
     return signer.signTransaction(xdr);
   },
 };
+
+export async function faucetWallet(userId: string) {
+  return requestTestnetFaucet(userId);
+}

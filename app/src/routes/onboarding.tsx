@@ -2,8 +2,8 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { redirectCompletedOnboarding } from "../lib/auth/guards";
 
 export const Route = createFileRoute("/onboarding")({
-  beforeLoad: ({ context }) => {
-    redirectCompletedOnboarding(context.auth);
+  beforeLoad: async ({ context }) => {
+    await redirectCompletedOnboarding(context.auth);
   },
   component: () => (
     <main className="veil-root">

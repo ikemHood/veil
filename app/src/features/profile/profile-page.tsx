@@ -16,7 +16,7 @@ export function ProfilePage({ handle, userId }: { handle: string; userId: string
       <section className="profile-panel">
         <span className="avatar">{handle.slice(0, 1).toUpperCase()}</span>
         <h1>{handle}</h1>
-        <p>{wallet?.accountId ?? "Your private dollar account is ready"}</p>
+        <p>{wallet?.accountId ?? "Account reference pending"}</p>
       </section>
       <section className="settings-list">
         <InfoRow icon={<FiShield />} label="Default privacy" value="Enabled" />

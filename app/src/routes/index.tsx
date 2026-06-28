@@ -1,16 +1,20 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import toast from "react-hot-toast";
 import { FiGlobe, FiShield } from "react-icons/fi";
-import { getOnboardingState } from "../features/onboarding/onboarding.store";
+import { getOnboardingState, setUsername } from "../features/onboarding/onboarding.store";
+import { getVeilProfile } from "../features/profile/profile.service";
 import { signInWithGoogle } from "../lib/auth/session";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: ({ context }) => {
+  beforeLoad: async ({ context }) => {
     const session = context.auth.session;
     if (!session) return;
     const state = getOnboardingState(session.user.id);
     if (!state.pinSet) throw redirect({ to: "/onboarding/pin" });
-    if (!state.username) throw redirect({ to: "/onboarding/username" });
+    const profile = await getVeilProfile();
+    if (!profile?.handle) throw redirect({ to: "/onboarding/username" });
+    if (state.username !== profile.handle) setUsername(session.user.id, profile.handle);
     throw redirect({ to: "/home" });
   },
   component: RouteComponent,
@@ -26,7 +30,9 @@ function RouteComponent() {
       await signInWithGoogle();
       await navigate({ to: "/onboarding/pin" });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sign-in failed");
+      const message = caught instanceof Error ? caught.message : "Sign-in failed";
+      toast.error(message);
+      setError(message);
     }
   };
 

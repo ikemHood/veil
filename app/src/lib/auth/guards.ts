@@ -1,6 +1,7 @@
 import { redirect } from "@tanstack/react-router";
 import type { AuthContextType } from "../../providers/auth-provider";
-import { getOnboardingState } from "../../features/onboarding/onboarding.store";
+import { getOnboardingState, setUsername } from "../../features/onboarding/onboarding.store";
+import { getVeilProfile } from "../../features/profile/profile.service";
 
 export function requireAuthenticated(auth: AuthContextType, nextPath = "/") {
   if (!auth.session) {
@@ -21,17 +22,23 @@ export function requirePin(auth: AuthContextType) {
   return { session, state };
 }
 
-export function requireOnboardingComplete(auth: AuthContextType, nextPath = "/") {
+export async function requireOnboardingComplete(auth: AuthContextType, nextPath = "/") {
   const session = requireAuthenticated(auth, nextPath);
   const state = getOnboardingState(session.user.id);
   if (!state.pinSet) throw redirect({ to: "/onboarding/pin" });
-  if (!state.username) throw redirect({ to: "/onboarding/username" });
+  const profile = await getVeilProfile();
+  if (!profile?.handle) throw redirect({ to: "/onboarding/username" });
+  if (state.username !== profile.handle) setUsername(session.user.id, profile.handle);
   return { session, state };
 }
 
-export function redirectCompletedOnboarding(auth: AuthContextType) {
+export async function redirectCompletedOnboarding(auth: AuthContextType) {
   const session = auth.session;
   if (!session) return;
   const state = getOnboardingState(session.user.id);
-  if (state.pinSet && state.username) throw redirect({ to: "/home" });
+  if (!state.pinSet) return;
+  const profile = await getVeilProfile();
+  if (!profile?.handle) return;
+  if (state.username !== profile.handle) setUsername(session.user.id, profile.handle);
+  throw redirect({ to: "/home" });
 }

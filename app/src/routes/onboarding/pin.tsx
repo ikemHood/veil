@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import toast from "react-hot-toast";
 import { FiLock } from "react-icons/fi";
 import { PinPad } from "../../features/onboarding/pin-pad";
 import { setTransactionPin } from "../../features/onboarding/onboarding.store";
@@ -37,8 +38,10 @@ function RouteComponent() {
           setTransactionPin(userId, value)
             .then(() => navigate({ to: "/onboarding/username" }))
             .catch((caught: unknown) => {
+              const message = caught instanceof Error ? caught.message : "PIN setup failed";
               setPin("");
-              setError(caught instanceof Error ? caught.message : "PIN setup failed");
+              toast.error(message);
+              setError(message);
             });
         }}
         value={pin}

@@ -1,16 +1,22 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import toast from "react-hot-toast";
 import { FiCheck, FiUser } from "react-icons/fi";
 import { getOnboardingState, setUsername } from "../../features/onboarding/onboarding.store";
-import { claimVeilProfile } from "../../features/profile/profile.service";
+import { claimVeilProfile, getVeilProfile } from "../../features/profile/profile.service";
 import { walletService } from "../../features/wallet/wallet.service";
 
 export const Route = createFileRoute("/onboarding/username")({
-  beforeLoad: ({ context }) => {
+  beforeLoad: async ({ context }) => {
     const session = context.auth.session;
     if (!session) throw redirect({ to: "/" });
     const state = getOnboardingState(session.user.id);
     if (!state.pinSet) throw redirect({ to: "/onboarding/pin" });
+    const profile = await getVeilProfile();
+    if (profile?.handle) {
+      if (state.username !== profile.handle) setUsername(session.user.id, profile.handle);
+      throw redirect({ to: "/home" });
+    }
   },
   component: RouteComponent,
 });
@@ -18,7 +24,7 @@ export const Route = createFileRoute("/onboarding/username")({
 function RouteComponent() {
   const navigate = useNavigate();
   const { auth } = Route.useRouteContext();
-  const [usernameDraft, setUsernameDraft] = useState("ikem");
+  const [usernameDraft, setUsernameDraft] = useState("");
   const [error, setError] = useState("");
   const [claiming, setClaiming] = useState(false);
 
@@ -31,12 +37,14 @@ function RouteComponent() {
     setClaiming(true);
     setError("");
     try {
-      setUsername(userId, clean);
       const wallet = await walletService.getOrCreateWallet(userId, clean);
-      await claimVeilProfile(clean, wallet.accountId);
+      const profile = await claimVeilProfile(clean, wallet.accountId);
+      setUsername(userId, profile.handle);
       await navigate({ to: "/home" });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Username claim failed");
+      const message = caught instanceof Error ? caught.message : "Username claim failed";
+      toast.error(message);
+      setError(message);
     } finally {
       setClaiming(false);
     }

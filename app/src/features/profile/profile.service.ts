@@ -24,34 +24,28 @@ function getLocalHandle(handle: string) {
 }
 
 export async function claimVeilProfile(handle: string, walletAddress: string) {
-  setLocalHandle(handle, walletAddress);
-  try {
-    return await apiRequest<VeilProfile>("/api/v1/veil/profile", {
-      method: "POST",
-      body: JSON.stringify({ handle: cleanHandle(handle), walletAddress }),
-    });
-  } catch {
-    return {
-      id: `local_${cleanHandle(handle)}`,
-      userId: "local",
-      handle: cleanHandle(handle),
-      walletAddress,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  }
+  const profile = await apiRequest<VeilProfile>("/api/v1/veil/profile", {
+    method: "POST",
+    body: JSON.stringify({ handle: cleanHandle(handle), walletAddress }),
+  });
+  if (profile.walletAddress) setLocalHandle(profile.handle, profile.walletAddress);
+  return profile;
+}
+
+export async function getVeilProfile() {
+  const profile = await apiRequest<VeilProfile | null>("/api/v1/veil/profile");
+  if (profile?.walletAddress) setLocalHandle(profile.handle, profile.walletAddress);
+  return profile;
 }
 
 export async function resolveVeilHandle(handle: string) {
   const clean = cleanHandle(handle);
-  try {
-    const profile = await apiRequest<{ handle: string; walletAddress: string | null }>(`/api/v1/veil/resolve/${clean}`);
-    if (!profile.walletAddress) throw new Error("Recipient has no account reference");
-    setLocalHandle(profile.handle, profile.walletAddress);
-    return profile.walletAddress;
-  } catch {
-    const local = getLocalHandle(clean);
-    if (!local) throw new Error("Recipient not found");
-    return local;
-  }
+  const profile = await apiRequest<{ handle: string; walletAddress: string | null }>(`/api/v1/veil/resolve/${clean}`);
+  if (!profile.walletAddress) throw new Error("Recipient has no account reference");
+  setLocalHandle(profile.handle, profile.walletAddress);
+  return profile.walletAddress;
+}
+
+export function resolveCachedVeilHandle(handle: string) {
+  return getLocalHandle(handle);
 }

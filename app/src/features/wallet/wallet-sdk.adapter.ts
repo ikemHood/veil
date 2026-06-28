@@ -87,6 +87,12 @@ export async function updateWalletUsername(userId: string, username: string) {
   return safeWallet;
 }
 
+export async function requestTestnetFaucet(userId: string) {
+  const wallet = read(userId);
+  if (!wallet) throw new Error("Private dollar account is not prepared");
+  return fundWallet(wallet);
+}
+
 export async function getSigner(userId: string): Promise<WalletSigner> {
   const wallet = read(userId);
   if (!wallet) throw new Error("Private dollar account is not ready");

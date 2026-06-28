@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import toast from "react-hot-toast";
 import { FiCheck, FiShield } from "react-icons/fi";
 import { shieldDeposit } from "../privacy/shield.service";
 import { formatUsdAmount, parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
 import { makeTxId, formatCurrency } from "../transactions/format";
 import { useTransactionStore } from "../transactions/transaction.store";
+import { faucetWallet } from "../wallet/wallet.service";
 import { useWalletStore } from "../wallet/wallet.store";
 
 export function DepositPage({ userId }: { userId: string }) {
@@ -21,19 +23,23 @@ export function DepositPage({ userId }: { userId: string }) {
     setStage("progress");
     setError("");
     try {
+      await faucetWallet(userId);
       const result = await shieldDeposit(userId, wallet.accountId, parseUsdAmount(amount));
       addTransaction({
         id: makeTxId(),
         type: "deposit",
         title: "Your deposit is now private",
-        counterparty: "On-ramp deposit",
+        counterparty: "Testnet faucet",
         amount: numericAmount,
         date: new Date().toISOString(),
         proof: proofFromPrivacyResult("deposit", result),
       });
+      toast.success("Your deposit is now private");
       setStage("success");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Deposit failed");
+      const message = caught instanceof Error ? caught.message : "Deposit failed";
+      toast.error(message);
+      setError(message);
       setStage("form");
     }
   };
@@ -48,15 +54,15 @@ export function DepositPage({ userId }: { userId: string }) {
         {stage === "form" && (
           <div className="flow-stack">
             <AmountField amount={amount} setAmount={setAmount} />
-            <p className="quiet-line">Deposit through the on-ramp. Veil secures funds after arrival.</p>
+            <p className="quiet-line">Request test funds to this account. Veil shields the balance after faucet arrival.</p>
             <button className="primary-button" disabled={!wallet || numericAmount <= 0} type="button" onClick={run}>
-              Deposit privately
+              Faucet and shield
             </button>
             {error && <p className="pin-error">{error}</p>}
           </div>
         )}
         {stage === "progress" && (
-          <ProgressState steps={["Deposit received. Securing your funds", "Generating commitment", "Updating private balance"]} />
+          <ProgressState steps={["Faucet requested", "Deposit received. Securing your funds", "Updating private balance"]} />
         )}
         {stage === "success" && (
           <div className="success-state">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import toast from "react-hot-toast";
 import { FiCheck, FiShield } from "react-icons/fi";
 import { verifyTransactionPin } from "../onboarding/onboarding.store";
 import { PinPad } from "../onboarding/pin-pad";
@@ -39,9 +40,12 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
         date: new Date().toISOString(),
         proof: proofFromPrivacyResult("send", result),
       });
+      toast.success("Payment sent privately");
       setStage("success");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Private send failed");
+      const message = caught instanceof Error ? caught.message : "Private send failed";
+      toast.error(message);
+      setError(message);
       setStage("form");
     }
   };
@@ -100,6 +104,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
               verifyTransactionPin(userId, value).then((valid) => {
                 if (!valid) {
                   setPin("");
+                  toast.error("PIN does not match");
                   setError("PIN does not match");
                   return;
                 }
