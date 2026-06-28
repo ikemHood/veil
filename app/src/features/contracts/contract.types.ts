@@ -16,6 +16,7 @@ export type ContractSigner = (xdr: string) => Promise<string>;
 export type ShieldedPoolContract = {
   getNoteCount(owner: string): Promise<number>;
   getRoot(owner: string): Promise<Uint8Array>;
+  getCommitmentLeaves?(owner: string): Promise<string[]>;
   wrap(owner: string, amount: bigint, commitment: Uint8Array, encryptedNote: Uint8Array, signer: ContractSigner): Promise<string>;
   confidentialTransfer(
     owner: string,

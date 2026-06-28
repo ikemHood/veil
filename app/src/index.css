@@ -152,6 +152,11 @@ button {
   color: #10151f;
 }
 
+.google-logo {
+  width: 18px;
+  height: 18px;
+}
+
 .screen-content {
   flex: 1;
   overflow: auto;

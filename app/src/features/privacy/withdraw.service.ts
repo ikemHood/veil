@@ -2,6 +2,7 @@ import { bytesToHex } from "@sct01/sdk";
 import { createShieldedPoolContract } from "../contracts/shielded-pool.contract";
 import { requireAssetId } from "../contracts/soroban.client";
 import { walletService } from "../wallet/wallet.service";
+import { syncCommitmentLeaves } from "./commitment-sync.service";
 import { findExactNote, getPrivateBalance, getNotesState, saveNotesState } from "./note-store";
 import { getNullifier, prepareWithdrawProof } from "./proof.service";
 import { preparePrivateTransfer, submitPrivateTransfer } from "./transfer.service";
@@ -22,13 +23,15 @@ export async function withdrawPrivate(userId: string, owner: string, amount: big
   if (!source) throw new Error("Unable to prepare selected withdrawal amount");
 
   const contract = createShieldedPoolContract();
-  const root = await contract.getRoot(owner);
+  const synced = await syncCommitmentLeaves(contract, owner, state);
+  state = synced.state;
+  const root = synced.root;
   const nullifier = getNullifier(source);
   const proof = await prepareWithdrawProof({
     assetId,
     root,
     source,
-    leaves: state.commitmentLeaves,
+    leaves: synced.state.commitmentLeaves,
     nullifier,
     destination,
     amount,

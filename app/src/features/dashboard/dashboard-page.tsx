@@ -1,24 +1,20 @@
 import { Link } from "@tanstack/react-router";
 import type React from "react";
-import { FiClock, FiDownload, FiPlus, FiSend, FiShield } from "react-icons/fi";
-import { getPrivateBalance } from "../privacy/note-store";
+import { FiClock, FiDownload, FiPlus, FiSend } from "react-icons/fi";
+import { usePrivateBalance } from "../privacy/use-private-balance";
 import { formatCurrency } from "../transactions/format";
 import { useTransactionStore } from "../transactions/transaction.store";
 import { TransactionList } from "../transactions/transaction-list";
 
 export function DashboardPage({ handle }: { handle: string }) {
-  const balance = Number(getPrivateBalance()) / 10_000_000;
+  const balance = Number(usePrivateBalance()) / 10_000_000;
   const transactions = useTransactionStore((state) => state.transactions);
 
   return (
     <div className="screen-content">
       <section className="balance-panel">
         <div className="panel-topline">
-          <span>Private balance</span>
-          <span className="secure-chip">
-            <FiShield />
-            Privacy ready
-          </span>
+          <span>Available balance</span>
         </div>
         <strong>{formatCurrency(balance)}</strong>
         <div className="balance-meta">

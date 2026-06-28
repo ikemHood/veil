@@ -5,8 +5,8 @@ import { FiCheck, FiShield } from "react-icons/fi";
 import { verifyTransactionPin } from "../onboarding/onboarding.store";
 import { PinPad } from "../onboarding/pin-pad";
 import { parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
-import { getPrivateBalance } from "../privacy/note-store";
 import { preparePrivateTransfer, submitPrivateTransfer } from "../privacy/transfer.service";
+import { usePrivateBalance } from "../privacy/use-private-balance";
 import { resolveRecipientAddress } from "../profile/profile.service";
 import { formatCurrency, makeTxId } from "../transactions/format";
 import { useTransactionStore } from "../transactions/transaction.store";
@@ -21,7 +21,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
   const [pin, setPin] = useState("");
   const [stage, setStage] = useState<"form" | "review" | "pin" | "progress" | "success">("form");
   const [error, setError] = useState("");
-  const balance = Number(getPrivateBalance()) / 10_000_000;
+  const balance = Number(usePrivateBalance()) / 10_000_000;
   const numericAmount = Number(amount);
 
   const run = async () => {

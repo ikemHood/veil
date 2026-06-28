@@ -2,6 +2,7 @@ import { bytesToHex, hexToBytes } from "@sct01/sdk";
 import { createShieldedPoolContract } from "../contracts/shielded-pool.contract";
 import { requireAssetId } from "../contracts/soroban.client";
 import { walletService } from "../wallet/wallet.service";
+import { syncCommitmentLeaves } from "./commitment-sync.service";
 import {
   createStoredNote,
   encodeNote,
@@ -24,7 +25,8 @@ export async function preparePrivateTransfer(userId: string, owner: string, amou
   const outputLeafIndex = await contract.getNoteCount(owner);
   const output = createStoredNote(assetId, amount, recipientAddress, outputLeafIndex, "send");
   const change = createStoredNote(assetId, changeAmount, owner, outputLeafIndex + 1, "change");
-  const root = await contract.getRoot(owner);
+  const synced = await syncCommitmentLeaves(contract, owner, state);
+  const root = synced.root;
   const nullifier = getNullifier(source);
   const encryptedNotes = [encodeNote(output.note), encodeNote(change.note)];
   const encryptedNoteHashes = [getEncryptedNoteHash(output.note), getEncryptedNoteHash(change.note)];
@@ -32,7 +34,7 @@ export async function preparePrivateTransfer(userId: string, owner: string, amou
     assetId,
     root,
     source,
-    leaves: state.commitmentLeaves,
+    leaves: synced.state.commitmentLeaves,
     nullifier,
     outputAmount: amount,
     outputOwner: recipientAddress,
@@ -46,7 +48,7 @@ export async function preparePrivateTransfer(userId: string, owner: string, amou
     changeCommitment: change.commitment,
     encryptedNoteHashes,
   });
-  return { assetId, change, changeAmount, encryptedNotes, nullifier, output, proof, root, source, state, userId };
+  return { assetId, change, changeAmount, encryptedNotes, nullifier, output, proof, root, source, state: synced.state, userId };
 }
 
 export async function submitPrivateTransfer(

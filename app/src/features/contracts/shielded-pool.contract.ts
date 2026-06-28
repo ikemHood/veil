@@ -1,5 +1,6 @@
 import { ContractClient, bytesToHex } from "@sct01/sdk";
-import { allowLocalPrivacyFallback, hasContractConfig, stellarConfig } from "./soroban.client";
+import * as StellarSdk from "@stellar/stellar-sdk";
+import { allowLocalPrivacyFallback, getEventLookbackLedgers, getWrapperStartLedger, hasContractConfig, stellarConfig } from "./soroban.client";
 import type { ShieldedPoolContract } from "./contract.types";
 
 function localHash(prefix: string) {
@@ -9,6 +10,7 @@ function localHash(prefix: string) {
 
 export function createShieldedPoolContract(): ShieldedPoolContract {
   if (hasContractConfig()) {
+    const rpc = new StellarSdk.rpc.Server(stellarConfig.rpcUrl);
     const client = new ContractClient({
       rpcUrl: stellarConfig.rpcUrl,
       horizonUrl: stellarConfig.horizonUrl,
@@ -20,6 +22,7 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
     return {
       getNoteCount: (owner) => client.getNoteCount(owner),
       getRoot: (owner) => client.getRoot(owner),
+      getCommitmentLeaves: () => fetchCommitmentLeaves(rpc),
       wrap: (owner, amount, commitment, encryptedNote, signer) => client.deposit(owner, amount, commitment, encryptedNote, signer),
       confidentialTransfer: (owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer) =>
         client.transfer(owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer),
@@ -40,6 +43,9 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
       const bytes = new TextEncoder().encode(`local-root:${owner}`);
       return crypto.subtle.digest("SHA-256", bytes).then((digest) => new Uint8Array(digest));
     },
+    async getCommitmentLeaves() {
+      return [];
+    },
     async wrap(owner, _amount, commitment) {
       const current = Number(window.localStorage.getItem(`veil.local-note-count.${owner}`) ?? "0");
       window.localStorage.setItem(`veil.local-note-count.${owner}`, String(current + 1));
@@ -54,4 +60,41 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
       return localHash("unwrap");
     },
   };
+}
+
+async function fetchCommitmentLeaves(rpc: StellarSdk.rpc.Server) {
+  const latest = await rpc.getLatestLedger();
+  const startLedger = getWrapperStartLedger() ?? Math.max(0, latest.sequence - getEventLookbackLedgers());
+  const filters = ["wrap", "conf_transfer"].map((name) => ({
+    type: "contract" as const,
+    contractIds: [stellarConfig.wrapperContractId],
+    topics: [[StellarSdk.xdr.ScVal.scvSymbol(name).toXDR("base64")]],
+  }));
+  const leaves: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const response = cursor
+      ? await rpc.getEvents({ cursor, filters, limit: 200 })
+      : await rpc.getEvents({ startLedger, filters, limit: 200 });
+    for (const event of response.events) leaves.push(...commitmentsFromEvent(event));
+    cursor = response.events.length > 0 && response.cursor ? response.cursor : undefined;
+  } while (cursor);
+
+  return leaves;
+}
+
+function commitmentsFromEvent(event: StellarSdk.rpc.Api.EventResponse) {
+  const eventName = String(StellarSdk.scValToNative(event.topic[0]));
+  const value = StellarSdk.scValToNative(event.value) as unknown;
+  if (eventName === "wrap") {
+    const [commitment] = Array.isArray(value) ? value : [];
+    return commitment instanceof Uint8Array ? [bytesToHex(commitment)] : [];
+  }
+  if (eventName === "conf_transfer") {
+    const outputCommitments = Array.isArray(value) ? value[1] : null;
+    if (!Array.isArray(outputCommitments)) return [];
+    return outputCommitments.flatMap((commitment) => (commitment instanceof Uint8Array ? [bytesToHex(commitment)] : []));
+  }
+  return [];
 }

@@ -9,7 +9,7 @@ import {
   poseidonHash,
   randomBytes,
 } from "@sct01/sdk";
-import { requireAssetId } from "../contracts/soroban.client";
+import { getLegacyLocalAssetId, requireAssetId } from "../contracts/soroban.client";
 import type { NotesStateBlob, StoredNote } from "./privacy.types";
 
 type Vault =
@@ -22,9 +22,23 @@ type Vault =
     };
 
 let vault: Vault = { status: "locked" };
+const notesChangedEvent = "veil:notes-changed";
 
 function vaultKey(owner: string) {
   return `veil:notes:${requireAssetId()}:${owner}`;
+}
+
+function legacyVaultKey(owner: string) {
+  return `veil:notes:${getLegacyLocalAssetId()}:${owner}`;
+}
+
+function emitNotesChanged() {
+  window.dispatchEvent(new Event(notesChangedEvent));
+}
+
+export function subscribeNotesChanged(listener: () => void) {
+  window.addEventListener(notesChangedEvent, listener);
+  return () => window.removeEventListener(notesChangedEvent, listener);
 }
 
 export async function unlockPrivateNotes(owner: string, pin: string) {
@@ -32,11 +46,22 @@ export async function unlockPrivateNotes(owner: string, pin: string) {
     new IndexedDbBlobStorage({ dbName: "veil-private-vault", storeName: "notes" }),
     { passcode: pin },
   );
-  const state = (await storage.load(vaultKey(owner))) ?? {
+  const key = vaultKey(owner);
+  let state = await storage.load(key);
+  const legacyKey = legacyVaultKey(owner);
+  if (!state && legacyKey !== key) {
+    const legacyState = await storage.load(legacyKey);
+    if (legacyState) {
+      state = legacyState;
+      await storage.save(key, legacyState);
+    }
+  }
+  state ??= {
     notes: [],
     commitmentLeaves: [],
   };
   vault = { status: "unlocked", owner, storage, state };
+  emitNotesChanged();
   return state;
 }
 
@@ -44,6 +69,7 @@ export async function saveNotesState(state: NotesStateBlob) {
   if (vault.status !== "unlocked") return;
   vault.state = state;
   await vault.storage.save(vaultKey(vault.owner), state);
+  emitNotesChanged();
 }
 
 export function getNotesState(): NotesStateBlob {

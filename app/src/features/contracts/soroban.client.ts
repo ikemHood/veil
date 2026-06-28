@@ -22,9 +22,23 @@ export function allowLocalPrivacyFallback() {
   return import.meta.env.VITE_ALLOW_LOCAL_PRIVACY_FALLBACK === "true";
 }
 
+export function getWrapperStartLedger() {
+  const value = Number(import.meta.env.VITE_WRAPPER_START_LEDGER);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+
+export function getEventLookbackLedgers() {
+  const value = Number(import.meta.env.VITE_EVENT_LOOKBACK_LEDGERS);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 200_000;
+}
+
 export function requireAssetId() {
   if (!stellarConfig.assetAddress && !allowLocalPrivacyFallback()) {
     throw new Error("Missing cstellar asset contract configuration");
   }
   return stellarConfig.assetAddress || localFallbackAsset;
+}
+
+export function getLegacyLocalAssetId() {
+  return localFallbackAsset;
 }
