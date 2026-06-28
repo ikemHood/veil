@@ -4,6 +4,7 @@ import type { VeilWallet, WalletSigner } from "./wallet.types";
 
 type StoredWallet = VeilWallet & {
   secretKey: string;
+  fundedAt?: string;
 };
 
 const walletPrefix = "veil.wallet.";
@@ -27,6 +28,24 @@ function write(wallet: StoredWallet) {
   window.localStorage.setItem(key(wallet.userId), JSON.stringify(wallet));
 }
 
+async function ensureTestnetAccount(publicKey: string) {
+  if (stellarConfig.networkPassphrase !== StellarSdk.Networks.TESTNET) return;
+  if (import.meta.env.VITE_AUTO_FUND_TESTNET === "false") return;
+
+  const response = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`);
+  if (!response.ok && response.status !== 400) {
+    throw new Error("Unable to prepare testnet account funding");
+  }
+}
+
+async function fundWallet(wallet: StoredWallet) {
+  if (wallet.fundedAt) return wallet;
+  await ensureTestnetAccount(wallet.publicKey);
+  const next = { ...wallet, fundedAt: new Date().toISOString() };
+  write(next);
+  return next;
+}
+
 export async function loadWallet(userId: string) {
   const wallet = read(userId);
   if (!wallet) return null;
@@ -37,8 +56,7 @@ export async function loadWallet(userId: string) {
 export async function provisionWallet(userId: string, username?: string): Promise<VeilWallet> {
   const existing = read(userId);
   if (existing) {
-    const next = username ? { ...existing, username } : existing;
-    write(next);
+    const next = await fundWallet(username ? { ...existing, username } : existing);
     const { secretKey: _secretKey, ...safeWallet } = next;
     return safeWallet;
   }
@@ -55,7 +73,8 @@ export async function provisionWallet(userId: string, username?: string): Promis
   // Temporary local adapter: replace this browser-held key with the selected
   // Stellar Wallet SDK/passkey custody model before production deployment.
   write(wallet);
-  const { secretKey: _secretKey, ...safeWallet } = wallet;
+  const fundedWallet = await fundWallet(wallet);
+  const { secretKey: _secretKey, ...safeWallet } = fundedWallet;
   return safeWallet;
 }
 
@@ -71,11 +90,12 @@ export async function updateWalletUsername(userId: string, username: string) {
 export async function getSigner(userId: string): Promise<WalletSigner> {
   const wallet = read(userId);
   if (!wallet) throw new Error("Private dollar account is not ready");
+  const fundedWallet = await fundWallet(wallet);
   return {
-    publicKey: wallet.publicKey,
+    publicKey: fundedWallet.publicKey,
     signTransaction: async (xdr) => {
       const transaction = new StellarSdk.Transaction(xdr, stellarConfig.networkPassphrase);
-      transaction.sign(StellarSdk.Keypair.fromSecret(wallet.secretKey));
+      transaction.sign(StellarSdk.Keypair.fromSecret(fundedWallet.secretKey));
       return transaction.toXDR();
     },
   };

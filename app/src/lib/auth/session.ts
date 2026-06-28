@@ -73,6 +73,10 @@ export function useSession() {
 }
 
 export async function signInWithGoogle() {
+  if (import.meta.env.VITE_ENABLE_REAL_GOOGLE_SIGNIN !== "true") {
+    createLocalSession();
+    return;
+  }
   try {
     await startGoogleSignIn();
   } catch (error) {
