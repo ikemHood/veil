@@ -1,0 +1,37 @@
+import { createEnv } from "@t3-oss/env-core";
+import "dotenv/config";
+import { z } from "zod";
+
+/**
+ * Environment configuration using t3-oss/env-core
+ * Provides type-safe environment variables with runtime validation
+ */
+export const env = createEnv({
+	server: {
+		// Server Configuration
+		NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+		PORT: z.coerce.number().default(3000),
+		LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+		SHUTDOWN_TIMEOUT_MS: z.coerce.number().default(10000),
+
+		// Database Configuration
+		DATABASE_URL: z.url(),
+
+		// Redis Configuration
+		REDIS_URL: z.url(),
+		REDIS_PASSWORD: z.string(),
+
+		// Authentication Configuration
+		BETTER_AUTH_SECRET: z.string(),
+
+		// OAuth Providers (Optional)
+		GOOGLE_CLIENT_ID: z.string().optional().default(""),
+		GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
+		FACEBOOK_CLIENT_ID: z.string().optional().default(""),
+		FACEBOOK_CLIENT_SECRET: z.string().optional().default(""),
+	},
+	runtimeEnv: process.env,
+	emptyStringAsUndefined: true,
+});
+
+export type Environment = typeof env;

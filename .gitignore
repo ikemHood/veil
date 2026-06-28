@@ -1,0 +1,12 @@
+prd.txt
+.env
+.env.*
+node_modules/
+dist/
+dist-ssr/
+dev-dist/
+*.log
+.DS_Store
+.playwright-mcp/
+veil-desktop.png
+app/veil-*-mobile.png
