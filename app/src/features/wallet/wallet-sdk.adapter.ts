@@ -8,6 +8,7 @@ type StoredWallet = VeilWallet & {
 };
 
 const walletPrefix = "veil.wallet.";
+const horizon = new StellarSdk.Horizon.Server(stellarConfig.horizonUrl);
 
 function key(userId: string) {
   return `${walletPrefix}${userId}`;
@@ -28,18 +29,29 @@ function write(wallet: StoredWallet) {
   window.localStorage.setItem(key(wallet.userId), JSON.stringify(wallet));
 }
 
+async function accountExists(publicKey: string) {
+  try {
+    await horizon.loadAccount(publicKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureTestnetAccount(publicKey: string) {
   if (stellarConfig.networkPassphrase !== StellarSdk.Networks.TESTNET) return;
   if (import.meta.env.VITE_AUTO_FUND_TESTNET === "false") return;
+  if (await accountExists(publicKey)) return;
 
   const response = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`);
-  if (!response.ok && response.status !== 400) {
-    throw new Error("Unable to prepare testnet account funding");
+  if (!response.ok && response.status !== 400) throw new Error("Unable to prepare account funding");
+  if (!(await accountExists(publicKey))) {
+    throw new Error("Account funding was requested but the account is not available yet");
   }
 }
 
 async function fundWallet(wallet: StoredWallet) {
-  if (wallet.fundedAt) return wallet;
+  if (wallet.fundedAt && (await accountExists(wallet.publicKey))) return wallet;
   await ensureTestnetAccount(wallet.publicKey);
   const next = { ...wallet, fundedAt: new Date().toISOString() };
   write(next);
@@ -90,7 +102,9 @@ export async function updateWalletUsername(userId: string, username: string) {
 export async function requestTestnetFaucet(userId: string) {
   const wallet = read(userId);
   if (!wallet) throw new Error("Private dollar account is not prepared");
-  return fundWallet(wallet);
+  const fundedWallet = await fundWallet(wallet);
+  const { secretKey: _secretKey, ...safeWallet } = fundedWallet;
+  return safeWallet;
 }
 
 export async function getSigner(userId: string): Promise<WalletSigner> {

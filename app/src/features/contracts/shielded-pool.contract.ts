@@ -1,5 +1,5 @@
 import { ContractClient, bytesToHex } from "@sct01/sdk";
-import { hasContractConfig, stellarConfig } from "./soroban.client";
+import { allowLocalPrivacyFallback, hasContractConfig, stellarConfig } from "./soroban.client";
 import type { ShieldedPoolContract } from "./contract.types";
 
 function localHash(prefix: string) {
@@ -20,12 +20,16 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
     return {
       getNoteCount: (owner) => client.getNoteCount(owner),
       getRoot: (owner) => client.getRoot(owner),
-      shield: (owner, amount, commitment, encryptedNote, signer) => client.deposit(owner, amount, commitment, encryptedNote, signer),
-      transfer: (owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer) =>
+      wrap: (owner, amount, commitment, encryptedNote, signer) => client.deposit(owner, amount, commitment, encryptedNote, signer),
+      confidentialTransfer: (owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer) =>
         client.transfer(owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer),
-      withdraw: (owner, proof, nullifier, destination, amount, root, assetId, signer) =>
+      unwrap: (owner, proof, nullifier, destination, amount, root, assetId, signer) =>
         client.withdraw(owner, proof, nullifier, destination, amount, root, assetId, signer),
     };
+  }
+
+  if (!allowLocalPrivacyFallback()) {
+    throw new Error("Missing cstellar contract configuration");
   }
 
   return {
@@ -36,18 +40,18 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
       const bytes = new TextEncoder().encode(`local-root:${owner}`);
       return crypto.subtle.digest("SHA-256", bytes).then((digest) => new Uint8Array(digest));
     },
-    async shield(owner, _amount, commitment) {
+    async wrap(owner, _amount, commitment) {
       const current = Number(window.localStorage.getItem(`veil.local-note-count.${owner}`) ?? "0");
       window.localStorage.setItem(`veil.local-note-count.${owner}`, String(current + 1));
-      return localHash(`shield_${bytesToHex(commitment).slice(0, 10)}`);
+      return localHash(`wrap_${bytesToHex(commitment).slice(0, 10)}`);
     },
-    async transfer(owner, _proof, _root, _assetId, _nullifiers, commitments) {
+    async confidentialTransfer(owner, _proof, _root, _assetId, _nullifiers, commitments) {
       const current = Number(window.localStorage.getItem(`veil.local-note-count.${owner}`) ?? "0");
       window.localStorage.setItem(`veil.local-note-count.${owner}`, String(current + commitments.length));
-      return localHash("transfer");
+      return localHash("confidential_transfer");
     },
-    async withdraw() {
-      return localHash("withdraw");
+    async unwrap() {
+      return localHash("unwrap");
     },
   };
 }

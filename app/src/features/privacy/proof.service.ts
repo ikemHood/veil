@@ -11,7 +11,7 @@ import {
   unwrapBindingHash,
   type Groth16Proof,
 } from "@sct01/sdk";
-import { hasContractConfig } from "../contracts/soroban.client";
+import { allowLocalPrivacyFallback, hasContractConfig } from "../contracts/soroban.client";
 import { deriveNullifierBytes, encodeNote } from "./note-store";
 import type { StoredNote } from "./privacy.types";
 
@@ -95,7 +95,10 @@ export function withdrawBinding(input: WithdrawProofInput) {
 
 export async function prepareTransferProof(input: TransferProofInput): Promise<Groth16Proof> {
   const bindingHash = transferBinding(input);
-  if (!hasContractConfig()) return localProof(bindingHash);
+  if (!hasContractConfig()) {
+    if (allowLocalPrivacyFallback()) return localProof(bindingHash);
+    throw new Error("Missing cstellar contract configuration");
+  }
   const merklePath = buildMerklePath(input.leaves, input.source.leafIndex ?? -1);
   if (bytesToHex(merklePath.root) !== bytesToHex(input.root)) throw new Error("Local Merkle path root does not match pool root");
   const pack = await prove({
@@ -128,7 +131,10 @@ export async function prepareTransferProof(input: TransferProofInput): Promise<G
 
 export async function prepareWithdrawProof(input: WithdrawProofInput): Promise<Groth16Proof> {
   const bindingHash = withdrawBinding(input);
-  if (!hasContractConfig()) return localProof(bindingHash);
+  if (!hasContractConfig()) {
+    if (allowLocalPrivacyFallback()) return localProof(bindingHash);
+    throw new Error("Missing cstellar contract configuration");
+  }
   const merklePath = buildMerklePath(input.leaves, input.source.leafIndex ?? -1);
   if (bytesToHex(merklePath.root) !== bytesToHex(input.root)) throw new Error("Local Merkle path root does not match pool root");
   const pack = await prove({
@@ -160,9 +166,12 @@ export async function prepareWithdrawProof(input: WithdrawProofInput): Promise<G
 }
 
 function localProof(seed: Uint8Array): Groth16Proof {
+  const b = new Uint8Array(64);
+  b.set(seed.slice(0, 32));
+  b.set(seed.slice(0, 32), 32);
   return {
     a: seed.slice(0, 32),
-    b: seed.slice(0, 64),
+    b,
     c: seed.slice(0, 32),
   };
 }
@@ -223,20 +232,20 @@ function zeroes(depth: number): bigint[] {
 function buildMerklePath(commitmentLeaves: string[], leafIndex: number, depth = treeDepth): MerklePath {
   if (leafIndex < 0 || leafIndex >= commitmentLeaves.length) throw new Error("Note leaf index missing from local tree");
   const zeros = zeroes(depth);
-  let level = commitmentLeaves.map((leaf) => fieldFromBytes(hexToBytes(leaf)));
+  let level = commitmentLeaves.map((leaf) => (leaf ? fieldFromBytes(hexToBytes(leaf)) : zeros[0]));
   const pathElements: string[] = [];
   const pathIndices: string[] = [];
   let index = leafIndex;
 
   for (let d = 0; d < depth; d += 1) {
     const siblingIndex = index ^ 1;
-    const sibling = siblingIndex < level.length ? level[siblingIndex] : zeros[d];
+    const sibling = siblingIndex < level.length && level[siblingIndex] !== undefined ? level[siblingIndex] : zeros[d];
     pathElements.push(sibling.toString());
     pathIndices.push((index & 1).toString());
     const next: bigint[] = [];
     for (let i = 0; i < level.length; i += 2) {
-      const left = level[i];
-      const right = i + 1 < level.length ? level[i + 1] : zeros[d];
+      const left = level[i] ?? zeros[d];
+      const right = i + 1 < level.length && level[i + 1] !== undefined ? level[i + 1] : zeros[d];
       next.push(poseidonHash([left, right]));
     }
     level = next.length > 0 ? next : [zeros[d + 1]];

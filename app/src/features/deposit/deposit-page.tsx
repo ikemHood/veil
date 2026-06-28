@@ -29,7 +29,7 @@ export function DepositPage({ userId }: { userId: string }) {
         id: makeTxId(),
         type: "deposit",
         title: "Your deposit is now private",
-        counterparty: "Testnet faucet",
+        counterparty: "Funding account",
         amount: numericAmount,
         date: new Date().toISOString(),
         proof: proofFromPrivacyResult("deposit", result),
@@ -54,15 +54,15 @@ export function DepositPage({ userId }: { userId: string }) {
         {stage === "form" && (
           <div className="flow-stack">
             <AmountField amount={amount} setAmount={setAmount} />
-            <p className="quiet-line">Request test funds to this account. Veil shields the balance after faucet arrival.</p>
+            <p className="quiet-line">Request funds to this account. Veil secures the balance after arrival.</p>
             <button className="primary-button" disabled={!wallet || numericAmount <= 0} type="button" onClick={run}>
-              Faucet and shield
+              Request and secure
             </button>
             {error && <p className="pin-error">{error}</p>}
           </div>
         )}
         {stage === "progress" && (
-          <ProgressState steps={["Faucet requested", "Deposit received. Securing your funds", "Updating private balance"]} />
+          <ProgressState steps={["Funds requested", "Deposit received. Securing funds", "Updating private balance"]} />
         )}
         {stage === "success" && (
           <div className="success-state">

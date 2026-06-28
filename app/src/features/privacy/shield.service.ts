@@ -11,7 +11,7 @@ export async function shieldDeposit(userId: string, owner: string, amount: bigin
   const state = getNotesState();
   const leafIndex = await contract.getNoteCount(owner);
   const { note, commitment } = createStoredNote(assetId, amount, owner, leafIndex, "deposit");
-  const txHash = await contract.shield(owner, amount, commitment, encodeNote(note), (xdr) => walletService.signTransaction(userId, xdr));
+  const txHash = await contract.wrap(owner, amount, commitment, encodeNote(note), (xdr) => walletService.signTransaction(userId, xdr));
   const nextState = {
     notes: [...state.notes, { ...note, creationTxHash: txHash }],
     commitmentLeaves: insertLeaf(state.commitmentLeaves, bytesToHex(commitment), leafIndex),
@@ -19,7 +19,7 @@ export async function shieldDeposit(userId: string, owner: string, amount: bigin
   await saveNotesState(nextState);
   return {
     txHash,
-    proofId: `shield:${txHash.slice(0, 14)}`,
+    proofId: `wrap:${txHash.slice(0, 14)}`,
     commitment: bytesToHex(commitment),
     balance: getPrivateBalance(assetId),
   };

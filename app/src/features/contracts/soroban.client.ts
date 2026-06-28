@@ -1,6 +1,8 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import type { ContractConfig } from "./contract.types";
 
+const localFallbackAsset = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+
 export const stellarConfig: ContractConfig = {
   network: import.meta.env.VITE_STELLAR_NETWORK ?? "testnet",
   rpcUrl: import.meta.env.VITE_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
@@ -9,13 +11,20 @@ export const stellarConfig: ContractConfig = {
   wrapperContractId: import.meta.env.VITE_WRAPPER_CONTRACT_ID ?? "",
   verifierContractId: import.meta.env.VITE_VERIFIER_CONTRACT_ID ?? "",
   aspContractId: import.meta.env.VITE_ASP_CONTRACT_ID ?? "",
-  assetAddress: import.meta.env.VITE_ASSET_ADDRESS ?? "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+  assetAddress: import.meta.env.VITE_ASSET_ADDRESS ?? "",
 };
 
 export function hasContractConfig() {
-  return Boolean(stellarConfig.wrapperContractId && stellarConfig.verifierContractId);
+  return Boolean(stellarConfig.wrapperContractId && stellarConfig.verifierContractId && stellarConfig.assetAddress);
+}
+
+export function allowLocalPrivacyFallback() {
+  return import.meta.env.VITE_ALLOW_LOCAL_PRIVACY_FALLBACK === "true";
 }
 
 export function requireAssetId() {
-  return stellarConfig.assetAddress;
+  if (!stellarConfig.assetAddress && !allowLocalPrivacyFallback()) {
+    throw new Error("Missing cstellar asset contract configuration");
+  }
+  return stellarConfig.assetAddress || localFallbackAsset;
 }

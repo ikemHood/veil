@@ -104,6 +104,13 @@ button {
   line-height: 1.5;
 }
 
+.app-header p {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .brand-row {
   display: inline-flex;
   align-items: center;
@@ -313,6 +320,7 @@ button {
   margin: 0;
   color: #10151f;
   letter-spacing: 0;
+  line-height: 1.08;
 }
 
 .section-heading h1,
@@ -421,6 +429,18 @@ button {
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.bottom-nav svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bottom-nav span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bottom-nav button.active,
@@ -738,16 +758,28 @@ button {
 }
 
 .spinner-ring {
+  position: relative;
   display: grid;
   width: 76px;
   height: 76px;
   place-items: center;
+  color: #1f6fff;
+  font-size: 1.6rem;
+}
+
+.spinner-ring::before {
+  position: absolute;
+  inset: 0;
   border: 5px solid #dbe8dc;
   border-top-color: #1f6fff;
   border-radius: 999px;
-  color: #1f6fff;
-  font-size: 1.6rem;
   animation: veil-spin 1s linear infinite;
+  content: "";
+}
+
+.spinner-ring svg {
+  position: relative;
+  z-index: 1;
 }
 
 .progress-list {

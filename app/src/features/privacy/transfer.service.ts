@@ -56,7 +56,7 @@ export async function submitPrivateTransfer(
 ): Promise<PrivacyTxResult> {
   const contract = createShieldedPoolContract();
   const commitments = [prepared.output.commitment, prepared.change.commitment];
-  const txHash = await contract.transfer(
+  const txHash = await contract.confidentialTransfer(
     owner,
     prepared.proof,
     prepared.root,
@@ -81,7 +81,7 @@ export async function submitPrivateTransfer(
   });
   return {
     txHash,
-    proofId: `transfer:${txHash.slice(0, 14)}`,
+    proofId: `confidential-transfer:${txHash.slice(0, 14)}`,
     nullifier: bytesToHex(prepared.nullifier),
     commitment: bytesToHex(prepared.output.commitment),
     balance: getPrivateBalance(prepared.assetId),

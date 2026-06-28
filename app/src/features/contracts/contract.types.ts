@@ -16,8 +16,8 @@ export type ContractSigner = (xdr: string) => Promise<string>;
 export type ShieldedPoolContract = {
   getNoteCount(owner: string): Promise<number>;
   getRoot(owner: string): Promise<Uint8Array>;
-  shield(owner: string, amount: bigint, commitment: Uint8Array, encryptedNote: Uint8Array, signer: ContractSigner): Promise<string>;
-  transfer(
+  wrap(owner: string, amount: bigint, commitment: Uint8Array, encryptedNote: Uint8Array, signer: ContractSigner): Promise<string>;
+  confidentialTransfer(
     owner: string,
     proof: Groth16Proof,
     root: Uint8Array,
@@ -27,7 +27,7 @@ export type ShieldedPoolContract = {
     encryptedNotes: Uint8Array[],
     signer: ContractSigner,
   ): Promise<string>;
-  withdraw(
+  unwrap(
     owner: string,
     proof: Groth16Proof,
     nullifier: Uint8Array,

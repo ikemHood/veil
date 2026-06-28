@@ -7,6 +7,7 @@ import { PinPad } from "../onboarding/pin-pad";
 import { parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
 import { getPrivateBalance } from "../privacy/note-store";
 import { withdrawPrivate } from "../privacy/withdraw.service";
+import { assertStellarPublicKey } from "../profile/profile.service";
 import { formatCurrency, makeTxId } from "../transactions/format";
 import { useTransactionStore } from "../transactions/transaction.store";
 import { useWalletStore } from "../wallet/wallet.store";
@@ -15,7 +16,7 @@ export function WithdrawPage({ userId }: { userId: string }) {
   const navigate = useNavigate();
   const wallet = useWalletStore((state) => state.wallet);
   const addTransaction = useTransactionStore((state) => state.addTransaction);
-  const [destination, setDestination] = useState("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+  const [destination, setDestination] = useState("");
   const [amount, setAmount] = useState("25");
   const [pin, setPin] = useState("");
   const [stage, setStage] = useState<"form" | "review" | "pin" | "progress" | "success">("form");
@@ -27,7 +28,8 @@ export function WithdrawPage({ userId }: { userId: string }) {
     if (!wallet) return;
     setStage("progress");
     try {
-      const result = await withdrawPrivate(userId, wallet.accountId, parseUsdAmount(amount), destination);
+      const destinationAddress = assertStellarPublicKey(destination, "Destination address");
+      const result = await withdrawPrivate(userId, wallet.accountId, parseUsdAmount(amount), destinationAddress);
       addTransaction({
         id: makeTxId(),
         type: "withdraw",
@@ -36,7 +38,7 @@ export function WithdrawPage({ userId }: { userId: string }) {
         amount: numericAmount,
         date: new Date().toISOString(),
         proof: proofFromPrivacyResult("withdraw", result),
-        destination,
+        destination: destinationAddress,
       });
       toast.success("Withdrawal complete");
       setStage("success");
@@ -66,13 +68,19 @@ export function WithdrawPage({ userId }: { userId: string }) {
             <label className="field-label" htmlFor="destination">
               Destination address
             </label>
-            <input className="text-field" id="destination" onChange={(event) => setDestination(event.target.value)} value={destination} />
+            <input
+              className="text-field"
+              id="destination"
+              onChange={(event) => setDestination(event.target.value)}
+              placeholder="G..."
+              value={destination}
+            />
             <label className="field-label" htmlFor="withdraw-amount">
               Amount
             </label>
             <input className="text-field" id="withdraw-amount" onChange={(event) => setAmount(event.target.value)} type="number" value={amount} />
             <p className="quiet-line">Available {formatCurrency(balance)}</p>
-            <button className="primary-button" disabled={!wallet || numericAmount <= 0 || numericAmount > balance} type="submit">
+            <button className="primary-button" disabled={!wallet || !destination.trim() || numericAmount <= 0 || numericAmount > balance} type="submit">
               Review withdrawal
             </button>
             {error && <p className="pin-error">{error}</p>}
@@ -111,7 +119,7 @@ export function WithdrawPage({ userId }: { userId: string }) {
             value={pin}
           />
         )}
-        {stage === "progress" && <ProgressState steps={["Preparing proof", "Unshielding selected amount", "Submitting withdrawal"]} />}
+        {stage === "progress" && <ProgressState steps={["Preparing proof", "Unwrapping selected amount", "Submitting withdrawal"]} />}
         {stage === "success" && (
           <div className="success-state">
             <span className="success-icon">

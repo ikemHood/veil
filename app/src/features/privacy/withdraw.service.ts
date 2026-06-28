@@ -33,7 +33,7 @@ export async function withdrawPrivate(userId: string, owner: string, amount: big
     destination,
     amount,
   });
-  const txHash = await contract.withdraw(owner, proof, nullifier, destination, amount, root, assetId, (xdr) =>
+  const txHash = await contract.unwrap(owner, proof, nullifier, destination, amount, root, assetId, (xdr) =>
     walletService.signTransaction(userId, xdr),
   );
   await saveNotesState({
@@ -42,7 +42,7 @@ export async function withdrawPrivate(userId: string, owner: string, amount: big
   });
   return {
     txHash,
-    proofId: `withdraw:${txHash.slice(0, 14)}`,
+    proofId: `unwrap:${txHash.slice(0, 14)}`,
     nullifier: bytesToHex(nullifier),
     balance: getPrivateBalance(assetId),
   };

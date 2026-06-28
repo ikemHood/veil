@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { FiGlobe, FiShield } from "react-icons/fi";
@@ -21,14 +21,12 @@ export const Route = createFileRoute("/")({
 });
 
 function RouteComponent() {
-  const navigate = useNavigate();
   const [error, setError] = useState("");
 
   const signIn = async () => {
     setError("");
     try {
       await signInWithGoogle();
-      await navigate({ to: "/onboarding/pin" });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Sign-in failed";
       toast.error(message);

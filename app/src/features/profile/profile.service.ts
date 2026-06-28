@@ -1,3 +1,4 @@
+import * as StellarSdk from "@stellar/stellar-sdk";
 import { apiRequest } from "../../lib/api/client";
 
 export type VeilProfile = {
@@ -12,7 +13,17 @@ export type VeilProfile = {
 const localHandlePrefix = "veil.handle.";
 
 function cleanHandle(handle: string) {
-  return handle.replace(/@veil$/, "").toLowerCase();
+  return handle.trim().replace(/^@/, "").replace(/@veil$/i, "").toLowerCase();
+}
+
+export function isStellarPublicKey(value: string) {
+  return StellarSdk.StrKey.isValidEd25519PublicKey(value.trim());
+}
+
+export function assertStellarPublicKey(value: string, label = "Stellar address") {
+  const address = value.trim();
+  if (!isStellarPublicKey(address)) throw new Error(`${label} is invalid`);
+  return address;
 }
 
 function setLocalHandle(handle: string, walletAddress: string) {
@@ -40,10 +51,19 @@ export async function getVeilProfile() {
 
 export async function resolveVeilHandle(handle: string) {
   const clean = cleanHandle(handle);
+  if (!clean) throw new Error("Recipient is required");
   const profile = await apiRequest<{ handle: string; walletAddress: string | null }>(`/api/v1/veil/resolve/${clean}`);
   if (!profile.walletAddress) throw new Error("Recipient has no account reference");
+  assertStellarPublicKey(profile.walletAddress, "Recipient account reference");
   setLocalHandle(profile.handle, profile.walletAddress);
   return profile.walletAddress;
+}
+
+export async function resolveRecipientAddress(input: string) {
+  const recipient = input.trim();
+  if (!recipient) throw new Error("Recipient is required");
+  if (isStellarPublicKey(recipient)) return recipient;
+  return resolveVeilHandle(recipient);
 }
 
 export function resolveCachedVeilHandle(handle: string) {

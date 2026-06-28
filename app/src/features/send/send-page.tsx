@@ -7,7 +7,7 @@ import { PinPad } from "../onboarding/pin-pad";
 import { parseUsdAmount, proofFromPrivacyResult } from "../privacy/disclosure.service";
 import { getPrivateBalance } from "../privacy/note-store";
 import { preparePrivateTransfer, submitPrivateTransfer } from "../privacy/transfer.service";
-import { resolveVeilHandle } from "../profile/profile.service";
+import { resolveRecipientAddress } from "../profile/profile.service";
 import { formatCurrency, makeTxId } from "../transactions/format";
 import { useTransactionStore } from "../transactions/transaction.store";
 import { useWalletStore } from "../wallet/wallet.store";
@@ -28,7 +28,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
     if (!wallet) return;
     setStage("progress");
     try {
-      const recipientAddress = recipient.endsWith("@veil") ? await resolveVeilHandle(recipient) : recipient;
+      const recipientAddress = await resolveRecipientAddress(recipient);
       const prepared = await preparePrivateTransfer(userId, wallet.accountId, parseUsdAmount(amount), recipientAddress);
       const result = await submitPrivateTransfer(prepared, wallet.accountId, recipientAddress);
       addTransaction({
@@ -68,7 +68,13 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
             <label className="field-label" htmlFor="recipient">
               Recipient
             </label>
-            <input className="text-field" id="recipient" onChange={(event) => setRecipient(event.target.value)} value={recipient} />
+            <input
+              className="text-field"
+              id="recipient"
+              onChange={(event) => setRecipient(event.target.value)}
+              placeholder="username or address"
+              value={recipient}
+            />
             <label className="field-label" htmlFor="send-amount">
               Amount
             </label>
@@ -114,7 +120,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
             value={pin}
           />
         )}
-        {stage === "progress" && <ProgressState steps={["Generating proof", "Submitting private transfer", "Updating history"]} />}
+        {stage === "progress" && <ProgressState steps={["Generating proof", "Submitting confidential transfer", "Updating history"]} />}
         {stage === "success" && (
           <div className="success-state">
             <span className="success-icon">
