@@ -1,22 +1,24 @@
 import { bigintToBytes, bytesToHex, fieldFromBytes, hexToBytes, poseidonHash } from "@sct01/sdk";
 import type { ShieldedPoolContract } from "../contracts/contract.types";
+import { getCachedCommitmentLeaves, saveCachedCommitmentLeaves } from "./commitment-cache.service";
 import type { NotesStateBlob } from "./privacy.types";
 
 export async function syncCommitmentLeaves(contract: ShieldedPoolContract, owner: string, state: NotesStateBlob) {
-  const syncedLeaves = contract.getCommitmentLeaves ? await contract.getCommitmentLeaves(owner) : [];
-  const merged = [...syncedLeaves];
+  const currentRoot = await contract.getRoot(owner);
+  const currentCount = await contract.getNoteCount(owner);
+  const cachedLeaves = getCachedCommitmentLeaves();
+  const eventLeaves = contract.getCommitmentLeaves ? await contract.getCommitmentLeaves(owner) : [];
+  const merged = chooseBaseLeaves(cachedLeaves, eventLeaves, currentCount);
 
   for (const note of state.notes) {
     if (note.leafIndex === undefined) continue;
     merged[note.leafIndex] = note.commitment;
   }
 
-  const currentRoot = await contract.getRoot(owner);
-  const currentCount = await contract.getNoteCount(owner);
   const missingLeafIndex = firstMissingLeafIndex(merged, currentCount);
   if (missingLeafIndex !== null) {
     throw new Error(
-      `Commitment tree sync incomplete at leaf ${missingLeafIndex}. Synced ${countKnownLeaves(merged, currentCount)} of ${currentCount} leaves. Use a fresh wrapper contract or an RPC endpoint with full wrapper event history.`,
+      `Commitment tree sync incomplete at leaf ${missingLeafIndex}. This wrapper has ${currentCount} commitments, but this browser knows ${countKnownLeaves(merged, currentCount)} public leaves. Use a fresh wrapper contract or an RPC endpoint with full wrapper event history.`,
     );
   }
   const syncedRoot = computeMerkleRoot(merged.slice(0, currentCount));
@@ -34,6 +36,14 @@ export async function syncCommitmentLeaves(contract: ShieldedPoolContract, owner
     root: currentRoot,
     rootHex: bytesToHex(currentRoot),
   };
+}
+
+function chooseBaseLeaves(cachedLeaves: string[], eventLeaves: string[], currentCount: number) {
+  if (eventLeaves.length >= currentCount) {
+    saveCachedCommitmentLeaves(eventLeaves);
+    return [...eventLeaves];
+  }
+  return [...cachedLeaves];
 }
 
 function firstMissingLeafIndex(leaves: string[], count: number) {
