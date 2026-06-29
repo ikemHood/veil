@@ -22,7 +22,7 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
     return {
       getNoteCount: (owner) => client.getNoteCount(owner),
       getRoot: (owner) => client.getRoot(owner),
-      getCommitmentLeaves: () => fetchCommitmentLeaves(rpc),
+      getCommitmentLeaves: (owner) => fetchCommitmentLeaves(client, owner, rpc),
       wrap: (owner, amount, commitment, encryptedNote, signer) => client.deposit(owner, amount, commitment, encryptedNote, signer),
       confidentialTransfer: (owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer) =>
         client.transfer(owner, proof, root, assetId, nullifiers, commitments, encryptedNotes, signer),
@@ -62,7 +62,29 @@ export function createShieldedPoolContract(): ShieldedPoolContract {
   };
 }
 
-async function fetchCommitmentLeaves(rpc: StellarSdk.rpc.Server) {
+async function fetchCommitmentLeaves(client: ContractClient, owner: string, rpc: StellarSdk.rpc.Server) {
+  try {
+    return await fetchCommitmentLeavesFromContract(client, owner);
+  } catch {
+    return fetchCommitmentLeavesFromEvents(rpc);
+  }
+}
+
+async function fetchCommitmentLeavesFromContract(client: ContractClient, owner: string) {
+  const count = await client.getNoteCount(owner);
+  const leaves: string[] = [];
+  const pageSize = 200;
+  for (let start = 0; start < count; start += pageSize) {
+    const page = await client.getCommitments(owner, start, Math.min(pageSize, count - start));
+    leaves.push(...page.map(bytesToHex));
+  }
+  if (leaves.length !== count) {
+    throw new Error(`Commitment index sync incomplete. Read ${leaves.length} of ${count} leaves from wrapper.`);
+  }
+  return leaves;
+}
+
+async function fetchCommitmentLeavesFromEvents(rpc: StellarSdk.rpc.Server) {
   const latest = await rpc.getLatestLedger();
   const latestLedger = latest.sequence;
   const startLedger = getWrapperStartLedger() ?? Math.max(0, latestLedger - getEventLookbackLedgers());

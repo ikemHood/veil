@@ -9,7 +9,7 @@ import {
   poseidonHash,
   randomBytes,
 } from "@sct01/sdk";
-import { getLegacyLocalAssetId, requireAssetId } from "../contracts/soroban.client";
+import { getLegacyLocalAssetId, requireAssetId, stellarConfig } from "../contracts/soroban.client";
 import type { NotesStateBlob, StoredNote } from "./privacy.types";
 
 type Vault =
@@ -25,7 +25,7 @@ let vault: Vault = { status: "locked" };
 const notesChangedEvent = "veil:notes-changed";
 
 function vaultKey(owner: string) {
-  return `veil:notes:${requireAssetId()}:${owner}`;
+  return `veil:notes:${stellarConfig.wrapperContractId || "local"}:${requireAssetId()}:${owner}`;
 }
 
 function legacyVaultKey(owner: string) {
@@ -49,7 +49,7 @@ export async function unlockPrivateNotes(owner: string, pin: string) {
   const key = vaultKey(owner);
   let state = await storage.load(key);
   const legacyKey = legacyVaultKey(owner);
-  if (!state && legacyKey !== key) {
+  if (!state && !stellarConfig.wrapperContractId && legacyKey !== key) {
     const legacyState = await storage.load(legacyKey);
     if (legacyState) {
       state = legacyState;
