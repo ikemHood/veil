@@ -48,6 +48,7 @@ export function WithdrawPage({ userId }: { userId: string }) {
       const message = errorMessage(caught, "Withdrawal failed");
       toast.error(message);
       setError(message);
+      setPin("");
       setStage("form");
     }
   };
@@ -97,7 +98,11 @@ export function WithdrawPage({ userId }: { userId: string }) {
               ["Disclosure", "Only selected amount exits"],
             ]}
             onBack={() => setStage("form")}
-            onContinue={() => setStage("pin")}
+            onContinue={() => {
+              setPin("");
+              setError("");
+              setStage("pin");
+            }}
           />
         )}
         {stage === "pin" && (
@@ -173,7 +178,7 @@ function Review({ items, onBack, onContinue }: { items: [string, string][]; onBa
           Back
         </button>
         <button className="primary-button" type="button" onClick={onContinue}>
-          Confirm with PIN
+          Confirm PIN
         </button>
       </div>
     </div>

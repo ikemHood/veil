@@ -521,11 +521,12 @@ button {
   justify-content: center;
   gap: 9px;
   min-height: 52px;
+  padding: 0 18px;
   border-radius: 8px;
   font-weight: 900;
   line-height: 1.1;
   text-align: center;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .primary-button {
@@ -735,6 +736,8 @@ button {
 }
 
 .key-button {
+  display: grid;
+  place-items: center;
   aspect-ratio: 1.45;
   border: 1px solid #dce3d8;
   border-radius: 8px;
@@ -742,6 +745,11 @@ button {
   color: #10151f;
   font-size: 1.2rem;
   font-weight: 900;
+}
+
+.key-button svg {
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .pin-error {
@@ -833,6 +841,10 @@ button {
   gap: 12px;
   justify-items: center;
   text-align: center;
+}
+
+.success-state .primary-button {
+  width: min(100%, 180px);
 }
 
 .success-icon {

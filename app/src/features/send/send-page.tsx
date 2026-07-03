@@ -48,6 +48,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
       const message = errorMessage(caught, "Private send failed");
       toast.error(message);
       setError(message);
+      setPin("");
       setStage("form");
     }
   };
@@ -90,7 +91,7 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
         )}
         {stage === "review" && (
           <Review
-            cta="Confirm with PIN"
+            cta="Confirm PIN"
             items={[
               ["From", handle],
               ["To", recipient],
@@ -98,7 +99,11 @@ export function SendPage({ handle, userId }: { handle: string; userId: string })
               ["Privacy", "Share only what is needed"],
             ]}
             onBack={() => setStage("form")}
-            onContinue={() => setStage("pin")}
+            onContinue={() => {
+              setPin("");
+              setError("");
+              setStage("pin");
+            }}
           />
         )}
         {stage === "pin" && (
