@@ -1,0 +1,3 @@
+[submodule "external/cstellar"]
+	path = external/cstellar
+	url = https://github.com/ikemHood/cstellar.git

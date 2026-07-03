@@ -15,7 +15,7 @@
     "install:prod": "yarn install --frozen-lockfile --non-interactive --production"
   },
   "dependencies": {
-    "@sct01/sdk": "file:vendor/sct01-sdk",
+    "@sct01/sdk": "https://github.com/ikemHood/cstellar/archive/1c43c9ed9969a972203a405f9e6980b96da0e853.tar.gz",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^16.0.1",
     "@tailwindcss/vite": "^4.1.11",
