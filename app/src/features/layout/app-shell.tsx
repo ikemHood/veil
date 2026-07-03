@@ -1,7 +1,7 @@
 import { Link, Outlet } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { FiClock, FiHome, FiLock, FiSend, FiUser } from "react-icons/fi";
-import { ensureDemoPrivateBalance } from "../privacy/demo-balance.service";
+import { importDeliveredNotes } from "../privacy/note-delivery.service";
 import { unlockPrivateNotes } from "../privacy/note-store";
 import { getOnboardingState } from "../onboarding/onboarding.store";
 import { useTransactionStore } from "../transactions/transaction.store";
@@ -17,11 +17,11 @@ export function AppShell({ session }: { session: VeilSession }) {
   useEffect(() => {
     if (!accountId || !onboarding.pinHash) return;
     void unlockPrivateNotes(accountId, onboarding.pinHash).then(() =>
-      ensureDemoPrivateBalance(session.user.id, accountId).catch((caught: unknown) => {
-        console.error("Demo balance setup failed", caught);
+      importDeliveredNotes(accountId).catch((caught: unknown) => {
+        console.error("Delivered note import failed", caught);
       }),
     );
-  }, [accountId, onboarding.pinHash, session.user.id]);
+  }, [accountId, onboarding.pinHash]);
 
   useEffect(() => {
     setTransactionOwner(accountId ?? null);

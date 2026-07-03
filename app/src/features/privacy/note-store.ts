@@ -23,6 +23,8 @@ type Vault =
 
 let vault: Vault = { status: "locked" };
 const notesChangedEvent = "veil:notes-changed";
+const mistakenDemoSeedPrefix = "veil.demo-private-balance.";
+const mistakenDemoAmount = "2000000000";
 
 function vaultKey(owner: string) {
   return `veil:notes:${stellarConfig.wrapperContractId || "local"}:${requireAssetId()}:${owner}`;
@@ -30,6 +32,14 @@ function vaultKey(owner: string) {
 
 function legacyVaultKey(owner: string) {
   return `veil:notes:${getLegacyLocalAssetId()}:${owner}`;
+}
+
+function legacyAssetVaultKey(owner: string) {
+  return `veil:notes:${requireAssetId()}:${owner}`;
+}
+
+function mistakenDemoSeedKey(owner: string) {
+  return `${mistakenDemoSeedPrefix}${stellarConfig.wrapperContractId || "local"}:${requireAssetId()}:${owner}`;
 }
 
 function emitNotesChanged() {
@@ -48,6 +58,14 @@ export async function unlockPrivateNotes(owner: string, pin: string) {
   );
   const key = vaultKey(owner);
   let state = await storage.load(key);
+  const legacyAssetKey = legacyAssetVaultKey(owner);
+  if (legacyAssetKey !== key) {
+    const legacyAssetState = await storage.load(legacyAssetKey);
+    if (legacyAssetState) {
+      state = mergeState(state, legacyAssetState);
+      await storage.save(key, state);
+    }
+  }
   const legacyKey = legacyVaultKey(owner);
   if (!state && !stellarConfig.wrapperContractId && legacyKey !== key) {
     const legacyState = await storage.load(legacyKey);
@@ -60,9 +78,41 @@ export async function unlockPrivateNotes(owner: string, pin: string) {
     notes: [],
     commitmentLeaves: [],
   };
+  state = removeMistakenDemoSeed(owner, state);
+  await storage.save(key, state);
   vault = { status: "unlocked", owner, storage, state };
   emitNotesChanged();
   return state;
+}
+
+function mergeState(current: NotesStateBlob | null, incoming: NotesStateBlob): NotesStateBlob {
+  if (!current) return incoming;
+  const commitments = new Set(current.notes.map((note) => note.commitment));
+  const notes = [...current.notes];
+  for (const note of incoming.notes) {
+    if (!commitments.has(note.commitment)) notes.push(note);
+  }
+  const commitmentLeaves = [...current.commitmentLeaves];
+  incoming.commitmentLeaves.forEach((leaf, index) => {
+    if (leaf && !commitmentLeaves[index]) commitmentLeaves[index] = leaf;
+  });
+  return { notes, commitmentLeaves };
+}
+
+function removeMistakenDemoSeed(owner: string, state: NotesStateBlob): NotesStateBlob {
+  const seedAt = window.localStorage.getItem(mistakenDemoSeedKey(owner));
+  if (!seedAt) return state;
+  const seedTime = Date.parse(seedAt);
+  if (!Number.isFinite(seedTime)) return state;
+  const notes = state.notes.filter((note) => {
+    const fromMistakenSeed =
+      note.amount === mistakenDemoAmount &&
+      note.memo === "deposit" &&
+      Math.abs(seedTime - note.createdAt) < 60 * 60 * 1000;
+    return !fromMistakenSeed;
+  });
+  window.localStorage.removeItem(mistakenDemoSeedKey(owner));
+  return { ...state, notes };
 }
 
 export async function saveNotesState(state: NotesStateBlob) {
@@ -84,6 +134,28 @@ export function getPrivateBalance(assetId = requireAssetId()) {
     if (note.spent || note.assetId !== assetId) return sum;
     return sum + BigInt(note.amount);
   }, 0n);
+}
+
+export async function mergeNotesState(notes: StoredNote[], leaves: string[] = []) {
+  const state = getNotesState();
+  const existingCommitments = new Set(state.notes.map((note) => note.commitment));
+  const nextNotes = [...state.notes];
+  let nextLeaves = [...state.commitmentLeaves];
+
+  for (const note of notes) {
+    if (!existingCommitments.has(note.commitment)) {
+      nextNotes.push(note);
+      existingCommitments.add(note.commitment);
+    }
+    if (note.leafIndex !== undefined) nextLeaves = insertLeaf(nextLeaves, note.commitment, note.leafIndex);
+  }
+  for (const leaf of leaves) {
+    if (!leaf) continue;
+    const index = nextLeaves.findIndex((item) => item === leaf);
+    if (index === -1) nextLeaves.push(leaf);
+  }
+
+  await saveNotesState({ notes: nextNotes, commitmentLeaves: nextLeaves });
 }
 
 export function createStoredNote(assetId: string, amount: bigint, owner: string, leafIndex: number, memo: string) {

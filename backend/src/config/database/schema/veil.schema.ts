@@ -31,3 +31,21 @@ export const veilProfileRelations = relations(veilProfile, ({ one }) => ({
 		references: [user.id],
 	}),
 }));
+
+export const veilNoteInbox = pgTable(
+	"veil_note_inbox",
+	{
+		id: text("id").primaryKey(),
+		recipientWalletAddress: text("recipient_wallet_address").notNull(),
+		senderWalletAddress: text("sender_wallet_address"),
+		wrapperContractId: text("wrapper_contract_id").notNull(),
+		commitment: text("commitment").notNull(),
+		txHash: text("tx_hash"),
+		noteJson: text("note_json").notNull(),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("veil_note_inbox_commitment_idx").on(table.wrapperContractId, table.recipientWalletAddress, table.commitment),
+		index("veil_note_inbox_recipient_idx").on(table.recipientWalletAddress),
+	],
+);

@@ -3,6 +3,7 @@ import { createShieldedPoolContract } from "../contracts/shielded-pool.contract"
 import { requireAssetId } from "../contracts/soroban.client";
 import { walletService } from "../wallet/wallet.service";
 import { rememberCommitmentLeaf } from "./commitment-cache.service";
+import { deliverPrivateNote } from "./note-delivery.service";
 import { syncCommitmentLeaves } from "./commitment-sync.service";
 import {
   createStoredNote,
@@ -69,6 +70,16 @@ export async function submitPrivateTransfer(
     prepared.encryptedNotes,
     (xdr) => walletService.signTransaction(prepared.userId, xdr),
   );
+  if (recipientAddress !== owner) {
+    void deliverPrivateNote({
+      note: prepared.output.note,
+      recipientWalletAddress: recipientAddress,
+      senderWalletAddress: owner,
+      txHash,
+    }).catch((caught: unknown) => {
+      console.error("Recipient note delivery failed", caught);
+    });
+  }
   rememberCommitmentLeaf(bytesToHex(prepared.output.commitment), prepared.output.note.leafIndex ?? 0);
   rememberCommitmentLeaf(bytesToHex(prepared.change.commitment), prepared.change.note.leafIndex ?? 0);
   const notes = prepared.state.notes.map((note) =>
