@@ -6,6 +6,8 @@ prd.txt
 !backend/.env.example
 node_modules/
 dist/
+!app/vendor/sct01-sdk/dist/
+!app/vendor/sct01-sdk/dist/**
 dist-ssr/
 dev-dist/
 *.log
