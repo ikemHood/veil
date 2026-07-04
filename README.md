@@ -4,7 +4,7 @@ Private global dollar banking for cross-border payments, built for the Stellar H
 
 Veil solves a core problem with blockchain banking: public ledgers make every payment, balance change, and financial relationship visible by default. That transparency is useful for settlement, but it is a major drawback for real cross-border banking. People need low-cost global payments without exposing their income, savings, suppliers, customers, or family support flows to the internet.
 
-Veil brings privacy back to global dollar accounts using zero-knowledge proofs on Stellar. Users can fund a wallet, shield deposits into a private pool, send privately, and withdraw back to a public Stellar address when needed. The app also uses human-readable usernames, with email-style transfer flows planned, so people do not have to manage raw addresses for everyday payments.
+Veil brings privacy back to global dollar accounts using zero-knowledge proofs on Stellar. It is powered by cstellar, the underlying developer toolkit for confidential transfers, including the contracts, circuits, SDK, and generated proof artifacts used by the app. Users can fund a wallet, shield deposits into a private pool, send privately, and withdraw back to a public Stellar address when needed. The app also uses human-readable usernames, with email-style transfer flows planned, so people do not have to manage raw addresses for everyday payments.
 
 Hackathon submission: [Stellar Hacks ZK on DoraHacks](https://dorahacks.io/hackathon/stellar-hacks-zk/buidl)
 
@@ -16,7 +16,7 @@ Hackathon submission: [Stellar Hacks ZK on DoraHacks](https://dorahacks.io/hacka
 - Google sign-in, PIN setup, and usernames for a familiar onboarding path.
 - Local encrypted note storage for private spend data.
 - Backend note delivery so recipients can recover received private notes after login.
-- Linked cstellar contracts, circuits, SDK, and artifacts through a Git submodule.
+- cstellar-powered contracts, circuits, SDK, and artifacts linked through a Git submodule.
 
 ## Why Privacy Matters
 
