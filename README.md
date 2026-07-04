@@ -13,7 +13,7 @@ Hackathon submission: [Stellar Hacks ZK on DoraHacks](https://dorahacks.io/hacka
 - Private cross-border dollar payments on Stellar testnet.
 - Shielded deposits, private transfers, and withdrawals.
 - Username-based recipient resolution for simpler transfers.
-- Google sign-in for a familiar onboarding path.
+- Google sign-in, PIN setup, and usernames for a familiar onboarding path.
 - Local encrypted note storage for private spend data.
 - Backend note delivery so recipients can recover received private notes after login.
 - Linked cstellar contracts, circuits, SDK, and artifacts through a Git submodule.
@@ -33,6 +33,12 @@ Veil keeps settlement on Stellar while moving sensitive payment details behind a
 5. Recipients import delivered notes into their encrypted vault after login.
 6. Withdrawals unwrap a selected private note amount to a public Stellar address.
 
+## Demo Flow
+
+The current demo runs on Stellar testnet. A user signs in with Google, sets a PIN, and claims a username that other users can send to. Deposits start as public testnet funds, but once Veil detects the deposit, it shields the funds into the private pool so the user can transact from a confidential balance.
+
+From there, a user can send privately to another Veil username or withdraw back to a public Stellar wallet address. The public chain still records that privacy operations occurred, including commitments and nullifiers, but it does not expose the private transfer amount, sender balance, or full payment history.
+
 The ZK and contract implementation lives in cstellar:
 
 - Contracts: [`external/cstellar/contracts`](external/cstellar/contracts)
@@ -44,7 +50,7 @@ Upstream cstellar repo: [ikemHood/cstellar](https://github.com/ikemHood/cstellar
 
 ## Future Direction: Private Yield
 
-Veil can become more than a private wallet. A future implementation will turn the shielded pool into a DeFi contract where private deposits can supply liquidity for lending and borrowing. Users who keep funds deposited would earn APY while their account activity stays private.
+Veil can become more than a private wallet. A future implementation will turn the shielded pool into a DeFi contract where private deposits can supply liquidity for lending and borrowing. Users who keep funds deposited would earn APY while their account activity stays private. Borrowers could deposit collateral, borrow from the pool, and pay fees or interest back to private depositors.
 
 The goal is a private global dollar account that supports:
 
