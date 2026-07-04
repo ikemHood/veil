@@ -106,4 +106,4 @@ Required services:
 
 ## Notes
 
-This is a hackathon demo. It uses testnet assets and browser-local encrypted storage for user note secrets. Production custody, account recovery, relayers, audits, rate limits, and hosted key management would need more hardening before real money use.
+This is a hackathon demo. For testnet purposes, Veil uses Stellar testnet XLM to represent USDC-like dollar value. It also uses browser-local encrypted storage for user note secrets. Production custody, account recovery, relayers, audits, rate limits, and hosted key management would need more hardening before real money use.
