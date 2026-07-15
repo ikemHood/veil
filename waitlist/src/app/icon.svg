@@ -1,0 +1,11 @@
+<svg
+	aria-labelledby="title"
+	role="img"
+	viewBox="0 0 64 64"
+	xmlns="http://www.w3.org/2000/svg"
+>
+	<title id="title">Veil</title>
+	<rect fill="#07120e" height="64" rx="16" width="64" />
+	<path d="M13 15h12.1L32 39.5 38.9 15H51L34.3 51h-4.6L13 15Z" fill="#d9ffcf" />
+	<circle cx="32" cy="32" fill="#07120e" r="4" />
+</svg>
