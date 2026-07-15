@@ -7,7 +7,7 @@ import {
 	protectedProcedure,
 	publicProcedure,
 } from "~/server/api/trpc";
-import { referral, user, waitlistMember } from "~/server/db/schema";
+import { waitlistMember } from "~/server/db/schema";
 import { sendReferralRewardEmail, sendWelcomeEmail } from "~/server/email";
 
 const handleSchema = z
@@ -185,104 +185,94 @@ export const waitlistRouter = createTRPCRouter({
 			if (!baseUrl) throw new Error("BETTER_AUTH_URL is not configured.");
 
 			try {
-				const result = await ctx.db.transaction(async (tx) => {
-					const [handleTaken] = await tx
-						.select({ id: waitlistMember.id })
-						.from(waitlistMember)
-						.where(eq(waitlistMember.normalizedHandle, input.handle))
-						.limit(1);
+				const referralId = crypto.randomUUID();
+				const claim = await ctx.db.execute<{
+					memberId: string;
+					rewardId: string | null;
+					rewardEmail: string | null;
+				}>(sql`
+					WITH inserted_member AS (
+						INSERT INTO "waitlist_member" (
+							"id", "user_id", "handle", "normalized_handle", "referral_code", "joined_at"
+						)
+						VALUES (
+							${memberId}, ${ctx.session.user.id}, ${input.handle}, ${input.handle}, ${referralCode}, ${now}
+						)
+						ON CONFLICT DO NOTHING
+						RETURNING "id", "handle"
+					),
+					selected_referrer AS (
+						SELECT member."id", auth_user."email"
+						FROM "waitlist_member" AS member
+						INNER JOIN "user" AS auth_user ON auth_user."id" = member."user_id"
+						WHERE member."referral_code" = ${referrerCode ?? ""}
+							AND member."user_id" <> ${ctx.session.user.id}
+					),
+					created_referral AS (
+						INSERT INTO "referral" (
+							"id", "referrer_member_id", "referred_member_id"
+						)
+						SELECT ${referralId}, referrer."id", member."id"
+						FROM inserted_member AS member
+						CROSS JOIN selected_referrer AS referrer
+						RETURNING "id", "referrer_member_id"
+					),
+					rewarded_referrer AS (
+						UPDATE "waitlist_member" AS member
+						SET "points" = member."points" + 1
+						FROM created_referral AS created
+						WHERE member."id" = created."referrer_member_id"
+						RETURNING member."id"
+					)
+					SELECT
+						member."id" AS "memberId",
+						created."id" AS "rewardId",
+						referrer."email" AS "rewardEmail"
+					FROM inserted_member AS member
+					LEFT JOIN created_referral AS created ON TRUE
+					LEFT JOIN selected_referrer AS referrer ON TRUE
+				`);
 
-					if (handleTaken) {
-						throw new TRPCError({
-							code: "CONFLICT",
-							message: "That handle is already taken.",
-						});
-					}
+				const result = claim.rows[0];
+				if (!result) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "That handle is already taken.",
+					});
+				}
 
-					const [member] = await tx
-						.insert(waitlistMember)
-						.values({
-							id: memberId,
-							userId: ctx.session.user.id,
-							handle: input.handle,
-							normalizedHandle: input.handle,
-							referralCode,
-							joinedAt: now,
-						})
-						.returning();
-
-					if (!member) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-					let reward:
-						| {
-								id: string;
-								email: string;
-								handle: string;
-						  }
-						| undefined;
-
-					if (referrerCode) {
-						const [referrer] = await tx
-							.select({
-								id: waitlistMember.id,
-								userId: waitlistMember.userId,
-								email: user.email,
-							})
-							.from(waitlistMember)
-							.innerJoin(user, eq(user.id, waitlistMember.userId))
-							.where(eq(waitlistMember.referralCode, referrerCode))
-							.limit(1);
-
-						if (referrer && referrer.userId !== ctx.session.user.id) {
-							const referralId = crypto.randomUUID();
-							await tx.insert(referral).values({
-								id: referralId,
-								referrerMemberId: referrer.id,
-								referredMemberId: member.id,
-							});
-							await tx
-								.update(waitlistMember)
-								.set({ points: sql`${waitlistMember.points} + 1` })
-								.where(eq(waitlistMember.id, referrer.id));
-
-							reward = {
-								id: referralId,
-								email: referrer.email,
-								handle: input.handle,
-							};
-						}
-					}
-
-					return { member, reward };
+				const member = await ctx.db.query.waitlistMember.findFirst({
+					where: eq(waitlistMember.id, result.memberId),
 				});
+				if (!member) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-				const position = await getPosition(ctx.db, result.member);
+				const position = await getPosition(ctx.db, member);
 				const dashboardUrl = new URL("/dashboard", baseUrl).toString();
 
 				const jobs = [
 					sendWelcomeEmail({
 						email: ctx.session.user.email,
-						handle: result.member.handle,
+						handle: member.handle,
 						position,
 						dashboardUrl,
-						memberId: result.member.id,
+						memberId: member.id,
 					}),
 				];
 
-				if (result.reward) {
+				if (result.rewardId && result.rewardEmail) {
 					jobs.push(
 						sendReferralRewardEmail({
-							email: result.reward.email,
-							handle: result.reward.handle,
+							email: result.rewardEmail,
+							handle: member.handle,
 							dashboardUrl,
-							referralId: result.reward.id,
+							referralId: result.rewardId,
 						}),
 					);
 				}
 
 				await Promise.allSettled(jobs);
 
-				return { handle: result.member.handle, position };
+				return { handle: member.handle, position };
 			} catch (error) {
 				if (error instanceof TRPCError) throw error;
 
